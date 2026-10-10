@@ -1,0 +1,4 @@
+/api/whop-webhook https://dsxsudwjrmwhnpukccly.supabase.co/functions/v1/whop-webhook 200
+/api/whop-payment https://dsxsudwjrmwhnpukccly.supabase.co/functions/v1/whop-payment 200
+/api/access-links https://dsxsudwjrmwhnpukccly.supabase.co/functions/v1/access-links 200
+/* /index.html 200
