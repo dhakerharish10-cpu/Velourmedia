@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import type { Profile, Content, Purchase, Subscription, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
+import type { Profile, Content, Purchase, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
 import { createWhopCheckout } from './whop';
 
 interface Toast {
@@ -29,7 +29,6 @@ interface StoreContextValue {
   feed: Content[];
   myContent: Content[];
   myPurchases: Purchase[];
-  mySubscriptions: Subscription[];
   earnings: CreatorEarnings | null;
   balances: CreatorBalances | null;
   bankDetails: BankDetails | null;
@@ -49,7 +48,6 @@ interface StoreContextValue {
   refreshMyContent: () => Promise<void>;
   refreshFeed: () => Promise<void>;
   refreshPurchases: () => Promise<void>;
-  refreshSubscriptions: () => Promise<void>;
   refreshEarnings: () => Promise<void>;
   refreshBalances: () => Promise<void>;
   refreshBankDetails: () => Promise<void>;
@@ -65,12 +63,8 @@ interface StoreContextValue {
 
   recordPurchase: (contentId: string, amount: number, paymentId: string) => Promise<{ error: string | null }>;
   isUnlocked: (contentId: string) => boolean;
-  handleSubscriptionPayment: (creatorId: string) => Promise<void>;
   handleTipPayment: (creatorId: string, contentId: string, amount: number) => Promise<void>;
-  recordSubscription: (creatorId: string, amount: number, paymentId: string) => Promise<{ error: string | null }>;
-  isSubscribed: (creatorId: string) => boolean;
-  checkSubscription: (creatorId: string) => Promise<boolean>;
-  getSubscriptionLink: (username: string) => string;
+  getProfileLink: (username: string) => string;
   deleteContent: (contentId: string) => Promise<{ error: string | null }>;
   togglePrivate: (contentId: string, isPrivate: boolean) => Promise<{ error: string | null }>;
   togglePublished: (contentId: string, isPublished: boolean) => Promise<{ error: string | null }>;
@@ -81,7 +75,7 @@ interface StoreContextValue {
   editPostId: string | null;
   openEditPost: (contentId: string) => void;
   closeEditPost: () => void;
-  updateProfile: (updates: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'username' | 'subscription_price' | 'email_sales_alerts' | 'email_payout_alerts' | 'email_account_alerts' | 'preferred_payout_method' | 'upi_id' | 'crypto_wallet_address' | 'crypto_network'>>) => Promise<{ error: string | null }>;
+  updateProfile: (updates: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'username' | 'email_sales_alerts' | 'email_payout_alerts' | 'email_account_alerts' | 'preferred_payout_method' | 'upi_id' | 'crypto_wallet_address' | 'crypto_network'>>) => Promise<{ error: string | null }>;
   uploadAvatar: (file: File) => Promise<{ error: string | null; url: string | null }>;
   setActiveProfile: (profileId: string) => void;
   createSubProfile: (username: string, displayName: string) => Promise<{ error: string | null }>;
@@ -129,7 +123,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [feed, setFeed] = useState<Content[]>([]);
   const [myContent, setMyContent] = useState<Content[]>([]);
   const [myPurchases, setMyPurchases] = useState<Purchase[]>([]);
-  const [mySubscriptions, setMySubscriptions] = useState<Subscription[]>([]);
   const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
   const [balances, setBalances] = useState<CreatorBalances | null>(null);
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
@@ -234,24 +227,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     setMyPurchases(data || []);
-  }, [user]);
-
-  const refreshSubscriptions = useCallback(async () => {
-    if (!user) {
-      setMySubscriptions([]);
-      return;
-    }
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('*, creator:profiles(*)')
-      .eq('subscriber_id', user.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
-    if (error) {
-      console.error('Failed to load subscriptions:', error.message);
-      return;
-    }
-    setMySubscriptions(data || []);
   }, [user]);
 
   const refreshEarnings = useCallback(async () => {
@@ -396,7 +371,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       refreshProfiles();
       refreshMyContent();
       refreshPurchases();
-      refreshSubscriptions();
       refreshEarnings();
       refreshBalances();
       refreshBankDetails();
@@ -408,7 +382,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setProfiles([]);
       setMyContent([]);
       setMyPurchases([]);
-      setMySubscriptions([]);
       setEarnings(null);
       setBankDetails(null);
       setPayouts([]);
@@ -416,7 +389,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setActiveProfileId(null);
       setSalesVisibilityPercent(100);
     }
-  }, [user, activeProfileId, refreshProfile, refreshProfiles, refreshMyContent, refreshPurchases, refreshSubscriptions, refreshEarnings, refreshBalances, refreshBankDetails, refreshPayouts, refreshPlatformSettings, refreshSalesVisibility]);
+  }, [user, activeProfileId, refreshProfile, refreshProfiles, refreshMyContent, refreshPurchases, refreshEarnings, refreshBalances, refreshBankDetails, refreshPayouts, refreshPlatformSettings, refreshSalesVisibility]);
 
   // Load feed on mount
   useEffect(() => {
@@ -470,7 +443,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProfiles([]);
     setMyContent([]);
     setMyPurchases([]);
-    setMySubscriptions([]);
     setEarnings(null);
     setActiveProfileId(null);
     setIsAgeVerified(false);
@@ -537,54 +509,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  const recordSubscription = useCallback(async (creatorId: string, amount: number, paymentId: string) => {
-    if (!user) return { error: 'You must be signed in.' };
-    const feePercent = platformSettings?.platform_fee_percent ?? 30;
-    const platformFee = Math.round(amount * feePercent / 100 * 100) / 100;
-    const netToCreator = Math.round((amount - platformFee) * 100) / 100;
-    const { error } = await supabase
-      .from('subscriptions')
-      .insert({
-        subscriber_id: user.id,
-        creator_id: creatorId,
-        amount,
-        status: 'active',
-        payment_id: paymentId,
-        payment_provider: 'whop',
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-      });
-    if (error) {
-      if (error.code === '23505') return { error: 'You are already subscribed to this creator.' };
-      return { error: error.message };
-    }
-    await refreshSubscriptions();
-    await refreshEarnings();
-    await refreshBalances();
-    return { error: null };
-  }, [user, platformSettings, refreshSubscriptions, refreshEarnings, refreshBalances]);
-
-  const handleSubscriptionPayment = useCallback(async (creatorId: string) => {
-    if (!user) {
-      addToast('Please sign in to subscribe.', 'error');
-      openAuth('signin');
-      return;
-    }
-
-    try {
-      const checkout = await createWhopCheckout({ creatorId });
-      if (!checkout.invoice_url) {
-        addToast('Payment checkout URL is missing. Please try again.', 'error');
-        return;
-      }
-      setIsRedirecting(true);
-      window.location.href = checkout.invoice_url;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Subscription checkout failed to initialize.';
-      addToast(message, 'error');
-    }
-  }, [user, addToast, openAuth]);
-
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, amount: number) => {
     try {
       const checkout = await createWhopCheckout({ creatorId, contentId, tipAmount: amount });
@@ -603,33 +527,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast]);
 
-  const isSubscribed = useCallback((creatorId: string) => {
-    return mySubscriptions.some((s) => s.creator_id === creatorId && s.status === 'active');
-  }, [mySubscriptions]);
-
-  const checkSubscription = useCallback(async (creatorId: string): Promise<boolean> => {
-    if (!user) return false;
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('id')
-      .eq('subscriber_id', user.id)
-      .eq('creator_id', creatorId)
-      .eq('status', 'active')
-      .maybeSingle();
-    if (error) {
-      console.error('Subscription check failed:', error.message);
-      return mySubscriptions.some((s) => s.creator_id === creatorId && s.status === 'active');
-    }
-    const isActive = !!data;
-    if (isActive && !mySubscriptions.some((s) => s.creator_id === creatorId)) {
-      await refreshSubscriptions();
-    }
-    return isActive;
-  }, [user, mySubscriptions, refreshSubscriptions]);
-
-  const getSubscriptionLink = useCallback((username: string) => {
+  const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';
-    return `${origin}/#c/${username}/subscribe`;
+    return `${origin}/#c/${username}`;
   }, []);
 
   const saveBankDetails = useCallback(async (details: Pick<BankDetails, 'bank_name' | 'account_holder_name' | 'bank_account_number' | 'ifsc_code' | 'pan_card_number'>) => {
@@ -716,7 +616,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [activeProfileId, user, refreshMyContent]);
 
-  const updateProfile = useCallback(async (updates: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'username' | 'subscription_price' | 'email_sales_alerts' | 'email_payout_alerts' | 'email_account_alerts' | 'preferred_payout_method' | 'upi_id' | 'crypto_wallet_address' | 'crypto_network'>>) => {
+  const updateProfile = useCallback(async (updates: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'username' | 'email_sales_alerts' | 'email_payout_alerts' | 'email_account_alerts' | 'preferred_payout_method' | 'upi_id' | 'crypto_wallet_address' | 'crypto_network'>>) => {
     if (!user) return { error: 'Not signed in.' };
     const targetId = activeProfileId || user.id;
     const { error } = await supabase
@@ -856,7 +756,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     feed,
     myContent,
     myPurchases,
-    mySubscriptions,
     earnings,
     balances,
     bankDetails,
@@ -876,7 +775,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     refreshMyContent,
     refreshFeed,
     refreshPurchases,
-    refreshSubscriptions,
     refreshEarnings,
     refreshBalances,
     refreshBankDetails,
@@ -891,12 +789,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     handlePayment,
     recordPurchase,
     isUnlocked,
-    handleSubscriptionPayment,
     handleTipPayment,
-    recordSubscription,
-    isSubscribed,
-    checkSubscription,
-    getSubscriptionLink,
+    getProfileLink,
     deleteContent,
   togglePrivate,
   togglePublished,

@@ -5,7 +5,7 @@ import { Navbar } from '../components/Navbar';
 import { ContentCard } from '../components/ContentCard';
 import { AuthModal } from '../components/AuthModal';
 import type { Profile, Content } from '../lib/types';
-import { User as UserIcon, ArrowLeft, Crown, Check } from 'lucide-react';
+import { User as UserIcon, ArrowLeft } from 'lucide-react';
 
 interface CreatorProfileProps {
   username: string;
@@ -13,7 +13,7 @@ interface CreatorProfileProps {
 }
 
 export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
-  const { user, isSubscribed } = useStore();
+  const { user } = useStore();
   const [creator, setCreator] = useState<Profile | null>(null);
   const [content, setContent] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,13 +47,7 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
     return () => { active = false; };
   }, [username]);
 
-  const subscribed = creator ? isSubscribed(creator.id) : false;
   const isOwnProfile = user?.id === creator?.id;
-
-  const onSubscribeClick = () => {
-    if (!creator) return;
-    onNavigate(`c/${creator.username}/subscribe`);
-  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -95,25 +89,6 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
                 {creator.bio && <p className="text-sm text-slate-600 dark:text-zinc-500 mt-1 max-w-md">{creator.bio}</p>}
               </div>
 
-              {/* Subscribe button */}
-              {!isOwnProfile && (
-                <div className="flex items-center gap-2">
-                  {subscribed ? (
-                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
-                      <Check size={16} />
-                      <span className="text-sm font-medium">Subscribed</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={onSubscribeClick}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-brand text-slate-900 dark:text-white font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
-                    >
-                      <Crown size={16} />
-                      Subscribe for $15.00/mo
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Content grid */}
@@ -131,7 +106,6 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
         )}
       </div>
 
-      {/* Subscription checkout lives on the dedicated /subscribe page */}
     </div>
   );
 }

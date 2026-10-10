@@ -19,7 +19,6 @@ import { CreatorProfile } from './pages/CreatorProfile';
 import { ContentView } from './pages/ContentView';
 import { AdminPanel } from './pages/AdminPanel';
 import { PurchaseLibrary } from './pages/PurchaseLibrary';
-import { Subscribe } from './pages/Subscribe';
 import { PaymentResult } from './pages/PaymentResult';
 import { AccessPage } from './pages/AccessPage';
 import { SupportPage } from './pages/SupportPage';
@@ -167,17 +166,6 @@ function Router() {
     return (
       <>
         <ContentView contentId={second} onNavigate={navigate} />
-        <ToastContainer />
-        <AuthModal onNavigate={navigate} />
-      </>
-    );
-  }
-
-  // Subscribe (no sidebar)
-  if (first === 'c' && second && third === 'subscribe') {
-    return (
-      <>
-        <Subscribe username={second} onNavigate={navigate} />
         <ToastContainer />
         <AuthModal onNavigate={navigate} />
       </>

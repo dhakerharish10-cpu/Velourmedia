@@ -277,7 +277,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
                     <h3 className="text-base font-semibold text-slate-900 dark:text-white">Platform Commission Fee</h3>
                   </div>
                   <p className="text-sm text-slate-500 dark:text-zinc-400 mb-4">
-                    This percentage is automatically deducted from every content purchase and subscription payment. The remaining amount is credited to the creator's earnings balance.
+                    This percentage is automatically deducted from every content purchase. The remaining amount is credited to the creator's earnings balance.
                   </p>
                   <div className="flex items-center gap-3 max-w-xs">
                     <div className="relative flex-1">

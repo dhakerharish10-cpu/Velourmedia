@@ -6,7 +6,7 @@ import { PersonaSwitcher } from '../components/PersonaSwitcher';
 import { Link2, Copy, Check, Crown, Settings as SettingsIcon, User as UserIcon, Bell, Shield, Sun, Moon, Loader2 } from 'lucide-react';
 
 export function SettingsPage() {
-  const { profile, openProfileEdit, openPersonaSwitcher, profiles, getSubscriptionLink, addToast, updateProfile } = useStore();
+  const { profile, openProfileEdit, openPersonaSwitcher, profiles, getProfileLink, addToast, updateProfile } = useStore();
   const { theme, toggleTheme } = useTheme();
   const [copied, setCopied] = useState(false);
   const [notifEmail, setNotifEmail] = useState(true);
@@ -24,14 +24,14 @@ export function SettingsPage() {
     }
   }, [profile]);
 
-  const subLink = profile?.username ? getSubscriptionLink(profile.username) : '';
+  const profileLink = profile?.username ? getProfileLink(profile.username) : '';
 
-  const handleCopySub = async () => {
-    if (!subLink) return;
+  const handleCopyLink = async () => {
+    if (!profileLink) return;
     try {
-      await navigator.clipboard.writeText(subLink);
+      await navigator.clipboard.writeText(profileLink);
       setCopied(true);
-      addToast('Subscription link copied!', 'success');
+      addToast('Profile link copied!', 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch {
       addToast('Failed to copy link.', 'error');
@@ -116,35 +116,29 @@ export function SettingsPage() {
             <span className="text-slate-700 dark:text-zinc-300 max-w-xs text-right truncate">{profile?.bio || 'Not set'}</span>
           </div>
           <div className="flex justify-between py-2 border-t border-slate-100 dark:border-zinc-800">
-            <span className="text-slate-500 dark:text-zinc-400">Subscription Price</span>
-            <span className="text-slate-700 dark:text-zinc-300">
-              {profile?.subscription_price ? `${Number(profile.subscription_price).toFixed(2)}/mo` : 'Not set'}
-            </span>
-          </div>
-          <div className="flex justify-between py-2 border-t border-slate-100 dark:border-zinc-800">
             <span className="text-slate-500 dark:text-zinc-400">Profile Type</span>
             <span className="text-slate-700 dark:text-zinc-300">{profile?.is_primary ? 'Primary' : 'Sub-profile'}</span>
           </div>
         </div>
       </div>
 
-      {/* Subscription link */}
+      {/* Profile link */}
       <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-2">
           <Link2 size={18} className="text-indigo-600 dark:text-indigo-400" />
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white">Subscription Link</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">Profile Link</h3>
         </div>
-        <p className="text-sm text-slate-500 dark:text-zinc-400 mb-4">Share this link so fans can subscribe to your premium content.</p>
-        {subLink ? (
+        <p className="text-sm text-slate-500 dark:text-zinc-400 mb-4">Share this link so fans can view and buy your content.</p>
+        {profileLink ? (
           <div className="flex items-center gap-2">
             <input
               type="text"
-              value={subLink}
+              value={profileLink}
               readOnly
               className="flex-1 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300 font-mono"
             />
             <button
-              onClick={handleCopySub}
+              onClick={handleCopyLink}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition-colors flex items-center gap-1.5"
             >
               {copied ? <Check size={14} /> : <Copy size={14} />}

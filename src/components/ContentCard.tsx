@@ -8,11 +8,10 @@ interface ContentCardProps {
 }
 
 export function ContentCard({ content, onNavigate }: ContentCardProps) {
-  const { isUnlocked, isSubscribed } = useStore();
+  const { isUnlocked } = useStore();
   const isOwned = isUnlocked(content.id);
   const isFree = content.price === 0;
-  const hasSubAccess = isSubscribed(content.creator_id);
-  const isLocked = !isFree && !isOwned && !hasSubAccess;
+  const isLocked = !isFree && !isOwned;
 
   return (
     <button
@@ -67,7 +66,7 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
           <div className="flex items-center gap-1 text-sm font-semibold">
             {isFree ? (
               <span className="text-emerald-600 dark:text-emerald-400">Free</span>
-            ) : isOwned || hasSubAccess ? (
+            ) : isOwned ? (
               <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Lock size={12} />
                 Unlocked

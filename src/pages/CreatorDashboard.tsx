@@ -25,7 +25,7 @@ function StatCard({ icon: Icon, label, value, accent }: { icon: LucideIcon; labe
 
 export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (path: string) => void }) {
   const {
-    user, profile, myContent, earnings, getSubscriptionLink, addToast,
+    user, profile, myContent, earnings, getProfileLink, addToast,
     openPersonaSwitcher, profiles, openProfileEdit, openUpload,
     deleteContent, togglePrivate, togglePublished, duplicateContent,
     salesVisibilityPercent,
@@ -52,12 +52,10 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
 
   if (!user) return null;
 
-  const profileLink = profile?.username ? getSubscriptionLink(profile.username) : '';
+  const profileLink = profile?.username ? getProfileLink(profile.username) : '';
   const totalViews = myContent.reduce((sum, item) => sum + (item.views_count || 0), 0);
   const ratio = salesVisibilityPercent / 100;
-  const visibleContentRevenue = Number(earnings?.content_revenue || 0) * ratio;
-  const visibleSubscriptionRevenue = Number(earnings?.subscription_revenue || 0) * ratio;
-  const totalRevenue = visibleContentRevenue + visibleSubscriptionRevenue;
+  const totalRevenue = Number(earnings?.content_revenue || 0) * ratio;
 
   const handleCopyProfileLink = async () => {
     if (!profileLink) return;
@@ -429,7 +427,7 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
 
   const ratio = salesVisibilityPercent / 100;
   const totalViews = myContent.reduce((sum, item) => sum + (item.views_count || 0), 0);
-  const grossRevenue = (Number(earnings?.content_revenue || 0) + Number(earnings?.subscription_revenue || 0)) * ratio;
+  const grossRevenue = Number(earnings?.content_revenue || 0) * ratio;
   const platformFees = Number(earnings?.platform_fees_paid || 0) * ratio;
   const netRevenue = grossRevenue - platformFees;
   const totalSales = Math.round((earnings?.total_sales || 0) * ratio);
@@ -447,7 +445,7 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
         <StatCard icon={Eye} label="Total Views" value={totalViews.toString()} accent />
         <StatCard icon={BarChart3} label="Total Sales" value={totalSales.toString()} />
         <StatCard icon={DollarSign} label="Net Revenue (70%)" value={`${netRevenue.toFixed(2)}`} />
-        <StatCard icon={Users} label="Subscribers" value={(earnings?.total_subscribers || 0).toString()} />
+        <StatCard icon={Package} label="Total Posts" value={myContent.length.toString()} />
       </div>
 
       {/* Revenue breakdown */}
@@ -459,10 +457,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
             <span className="text-sm font-semibold text-slate-900">${(Number(earnings?.content_revenue || 0) * ratio).toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-slate-100">
-            <span className="text-sm text-slate-600">Gross Subscription Revenue</span>
-            <span className="text-sm font-semibold text-slate-900">${(Number(earnings?.subscription_revenue || 0) * ratio).toFixed(2)}</span>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b border-slate-100">
             <span className="text-sm text-slate-600">Platform Fee (30%)</span>
             <span className="text-sm font-semibold text-rose-500">-${platformFees.toFixed(2)}</span>
           </div>
@@ -471,8 +465,8 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
             <span className="text-sm font-semibold text-emerald-600">${netRevenue.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-slate-600">Active Subscribers</span>
-            <span className="text-sm font-semibold text-slate-900">{earnings?.total_subscribers || 0}</span>
+            <span className="text-sm text-slate-600">Total Posts</span>
+            <span className="text-sm font-semibold text-slate-900">{myContent.length}</span>
           </div>
         </div>
       </div>

@@ -9,7 +9,7 @@ interface PaymentResultProps {
 }
 
 export function PaymentResult({ onNavigate }: PaymentResultProps) {
-  const { user, refreshSubscriptions, refreshPurchases } = useStore();
+  const { user, refreshPurchases } = useStore();
   const [status, setStatus] = useState<'checking' | 'confirmed' | 'pending' | 'failed' | 'error'>('checking');
   const [contentId, setContentId] = useState<string | null>(null);
   const [accessLink, setAccessLink] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
         if (result.status === 'confirmed' || result.status === 'finished') {
           setStatus('confirmed');
           if (user) {
-            await Promise.all([refreshSubscriptions(), refreshPurchases()]);
+            await refreshPurchases();
           } else if (result.content_id && !tokenCreated) {
             // Guest checkout: create a 7-day access token and link
             const guestEmail = sessionStorage.getItem('guest_email');
@@ -71,7 +71,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
     return () => {
       active = false;
     };
-  }, [user, refreshSubscriptions, refreshPurchases, tokenCreated]);
+  }, [user, refreshPurchases, tokenCreated]);
 
   const content = {
     checking: {

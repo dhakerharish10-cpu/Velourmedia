@@ -24,7 +24,7 @@ function MetricCard({ icon: Icon, label, value, accent }: { icon: LucideIcon; la
 export function DashboardHome({ onNavigate }: { onNavigate: (path: string) => void }) {
   const {
     user, profile, myContent, earnings, deleteContent, togglePrivate, togglePublished, duplicateContent,
-    addToast, openAuth, openPersonaSwitcher, profiles, getSubscriptionLink, openUpload,
+    addToast, openAuth, openPersonaSwitcher, profiles, getProfileLink, openUpload,
   } = useStore();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedProfile, setCopiedProfile] = useState(false);
@@ -44,7 +44,7 @@ export function DashboardHome({ onNavigate }: { onNavigate: (path: string) => vo
 
   const handleCopyProfileLink = async () => {
     if (!profile?.username) return;
-    const link = getSubscriptionLink(profile.username);
+    const link = getProfileLink(profile.username);
     try {
       await navigator.clipboard.writeText(link);
       setCopiedProfile(true);
@@ -97,13 +97,13 @@ export function DashboardHome({ onNavigate }: { onNavigate: (path: string) => vo
     );
   }
 
-  const grossRevenue = Number(earnings?.content_revenue || 0) + Number(earnings?.subscription_revenue || 0);
+  const grossRevenue = Number(earnings?.content_revenue || 0);
   const platformFees = Number(earnings?.platform_fees_paid || 0);
   const netRevenue = grossRevenue - platformFees;
   const totalSales = earnings?.total_sales || 0;
   const totalPosts = myContent.length;
   const totalViews = myContent.reduce((sum, item) => sum + (item.views_count || 0), 0);
-  const profileLink = profile?.username ? getSubscriptionLink(profile.username) : '';
+  const profileLink = profile?.username ? getProfileLink(profile.username) : '';
 
   const timeFilters: TimeFilter[] = ['Today', '7D', '30D', 'Lifetime'];
 

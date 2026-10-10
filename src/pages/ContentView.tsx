@@ -24,13 +24,12 @@ interface ContentViewProps {
 }
 
 export function ContentView({ contentId, onNavigate }: ContentViewProps) {
-  const { user, isUnlocked, isSubscribed, handlePayment, handleTipPayment, openAuth } = useStore();
+  const { user, isUnlocked, handlePayment, handleTipPayment, openAuth } = useStore();
   const [content, setContent] = useState<Content | null>(null);
   const [mediaItems, setMediaItems] = useState<ContentMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [subAccess, setSubAccess] = useState(false);
   const [guestUnlocked, setGuestUnlocked] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [guestEmail, setGuestEmail] = useState('');
@@ -39,7 +38,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
   const isOwned = isUnlocked(contentId);
   const isFree = content?.price === 0;
-  const hasAccess = isOwned || isFree || subAccess || guestUnlocked;
+  const hasAccess = isOwned || isFree || guestUnlocked;
 
   const fetchMedia = useCallback(async (contentId: string) => {
     const { data } = await supabase
@@ -95,24 +94,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         }
       });
 
-      if (user?.id && contentData.creator_id) {
-        const subscribed = isSubscribed(contentData.creator_id);
-        if (!subscribed) {
-          const { data: sub } = await supabase
-            .from('subscriptions')
-            .select('id')
-            .eq('subscriber_id', user.id)
-            .eq('creator_id', contentData.creator_id)
-            .eq('status', 'active')
-            .maybeSingle();
-          if (active) setSubAccess(!!sub);
-        } else {
-          setSubAccess(true);
-        }
-      } else {
-        if (active) setSubAccess(false);
-      }
-
       if (contentData.media_count > 1) {
         const extraMedia = await fetchMedia(contentId);
         if (active) setMediaItems(extraMedia);
@@ -122,7 +103,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     })();
 
     return () => { active = false; };
-  }, [contentId, fetchMedia, user, isSubscribed]);
+  }, [contentId, fetchMedia, user]);
 
   useEffect(() => {
     const hash = window.location.hash;

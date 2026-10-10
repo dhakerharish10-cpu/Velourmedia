@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../lib/store';
-import { X, Loader2, Camera, User as UserIcon, DollarSign } from 'lucide-react';
+import { X, Loader2, Camera, User as UserIcon } from 'lucide-react';
 
 export function ProfileEditModal() {
   const { isProfileEditOpen, closeProfileEdit, profile, updateProfile, uploadAvatar, addToast } = useStore();
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
-  const [subscriptionPrice, setSubscriptionPrice] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -20,7 +19,6 @@ export function ProfileEditModal() {
       setDisplayName(profile.display_name || '');
       setUsername(profile.username);
       setBio(profile.bio || '');
-      setSubscriptionPrice(profile.subscription_price?.toString() || '');
       setAvatarUrl(profile.avatar_url);
       setAvatarFile(null);
       setAvatarPreview(null);
@@ -63,19 +61,11 @@ export function ProfileEditModal() {
       finalAvatarUrl = url;
     }
 
-    const subPrice = subscriptionPrice.trim() === '' ? null : parseFloat(subscriptionPrice);
-    if (subPrice !== null && (isNaN(subPrice) || subPrice < 0)) {
-      setError('Invalid subscription price.');
-      setSaving(false);
-      return;
-    }
-
     const { error: updateError } = await updateProfile({
       display_name: displayName.trim(),
       username: username.trim(),
       bio: bio.trim(),
       avatar_url: finalAvatarUrl,
-      subscription_price: subPrice,
     });
 
     if (updateError) {
@@ -178,24 +168,6 @@ export function ProfileEditModal() {
               rows={3}
               className="w-full rounded-xl bg-slate-50 dark:bg-zinc-950 dark:bg-zinc-900/80 border border-slate-300 dark:border-zinc-700/50 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all resize-none"
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Monthly Subscription Price (USD $)</label>
-            <div className="relative">
-              <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-              <input
-                type="number"
-                value={subscriptionPrice}
-                onChange={(e) => setSubscriptionPrice(e.target.value)}
-                placeholder="Leave empty for no subscription tier"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                className="w-full rounded-xl bg-zinc-900/80 border border-zinc-700/50 pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
-              />
-            </div>
-            <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">Fans can subscribe for monthly access. Leave empty to disable.</p>
           </div>
 
           {error && (

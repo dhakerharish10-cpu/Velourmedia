@@ -7,7 +7,6 @@ export interface Profile {
   is_admin: boolean;
   is_primary: boolean;
   owner_id: string | null;
-  subscription_price: number | null;
   email_sales_alerts: boolean;
   email_payout_alerts: boolean;
   email_account_alerts: boolean;
@@ -66,29 +65,13 @@ export interface Purchase {
   content?: Content;
 }
 
-export interface Subscription {
-  id: string;
-  subscriber_id: string;
-  creator_id: string;
-  amount: number;
-  status: 'active' | 'cancelled';
-  payment_id: string | null;
-  payment_provider: string | null;
-  platform_fee: number;
-  net_to_creator: number;
-  created_at: string;
-  creator?: Profile;
-}
-
 export interface CreatorEarnings {
   creator_id: string;
   content_revenue: number;
-  subscription_revenue: number;
   total_revenue: number;
   gross_revenue: number;
   platform_fees_paid: number;
   total_sales: number;
-  total_subscribers: number;
 }
 
 export interface CreatorBalances {
