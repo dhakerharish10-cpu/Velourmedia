@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { Navbar } from '../components/Navbar';
@@ -10,6 +10,8 @@ import {
   ChevronLeft, ChevronRight, BadgeCheck, Mail, ArrowRight, Eye, Heart,
   ShieldCheck, Zap, AlertTriangle, FileText, Flag,
 } from 'lucide-react';
+
+const SWIPE_THRESHOLD = 50;
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -139,6 +141,13 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const goPrev = () => setActiveIndex((i) => (i === 0 ? allMedia.length - 1 : i - 1));
   const goNext = () => setActiveIndex((i) => (i === allMedia.length - 1 ? 0 : i + 1));
 
+  const touchStartX = useRef(0);
+  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
+  };
+
   const onPayToUnlock = async () => {
     if (!content) return;
 
@@ -174,7 +183,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const thumbBlurClass = content?.blur_level === 'low' ? 'blur-sm' : content?.blur_level === 'hard' ? 'blur-2xl' : 'blur-xl';
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950">
+    <div className="min-h-screen bg-[#0B0B0F]">
       <Navbar onNavigate={onNavigate} />
       <AuthModal onNavigate={onNavigate} />
 
@@ -343,35 +352,75 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         ) : (
           /* ---- LOCKED UNLOCK VIEW — redesigned ---- */
           <div className="space-y-5">
-            {/* 1. Stacked Card Carousel with Blurred Previews */}
-            <div className="relative">
-              {/* Stacked card backdrop layers */}
+            {/* 1. 3D Stacked Card Carousel with Blurred Previews */}
+            <div className="relative pb-3" style={{ perspective: '1200px' }}>
+              {/* 3D stacked card backdrop layers */}
               {allMedia.length > 1 && (
                 <>
-                  <div className="absolute -top-2.5 left-5 right-5 h-full rounded-3xl bg-zinc-800/50 dark:bg-zinc-800/50 border border-zinc-700/40" />
-                  <div className="absolute -top-1.5 left-3 right-3 h-full rounded-3xl bg-zinc-700/40 dark:bg-zinc-700/40 border border-zinc-600/30" />
-                  <div className="absolute -top-0.5 left-1.5 right-1.5 h-full rounded-3xl bg-zinc-600/30 dark:bg-zinc-600/30 border border-zinc-500/20" />
+                  <div
+                    className="absolute rounded-3xl bg-[#15151B] border border-zinc-800/60"
+                    style={{
+                      top: 12,
+                      left: 20,
+                      right: 20,
+                      bottom: -12,
+                      transform: 'translateZ(-40px)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    }}
+                  />
+                  <div
+                    className="absolute rounded-3xl bg-[#1A1A22] border border-zinc-800/50"
+                    style={{
+                      top: 7,
+                      left: 12,
+                      right: 12,
+                      bottom: -7,
+                      transform: 'translateZ(-20px)',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                    }}
+                  />
+                  <div
+                    className="absolute rounded-3xl bg-[#1E1E28] border border-zinc-800/40"
+                    style={{
+                      top: 3,
+                      left: 5,
+                      right: 5,
+                      bottom: -3,
+                      transform: 'translateZ(-8px)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                    }}
+                  />
                 </>
               )}
 
               {/* Main preview card */}
-              <div className="relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-700/50 shadow-2xl shadow-black/40">
+              <div
+                className="relative rounded-3xl overflow-hidden bg-[#131318] border border-zinc-800/50 shadow-2xl shadow-black/50 transition-transform duration-300"
+                style={{ transform: 'translateZ(0)', transformStyle: 'preserve-3d' }}
+              >
                 {/* Blurred media preview per carousel item */}
-                <div className="relative aspect-[4/5] sm:aspect-[4/3] flex items-center justify-center select-none"
+                <div
+                  className="relative aspect-[4/5] sm:aspect-[4/3] flex items-center justify-center select-none"
                   onContextMenu={(e) => e.preventDefault()}
                   onDragStart={(e) => e.preventDefault()}
+                  onTouchStart={onTouchStart}
+                  onTouchEnd={onTouchEnd}
                   style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                 >
                   {allMedia.map((m, i) => (
                     <div
                       key={i}
-                      className={`absolute inset-0 transition-opacity duration-500 ${i === activeIndex ? 'opacity-100' : 'opacity-0'}`}
+                      className={`absolute inset-0 transition-all duration-700 ease-out ${
+                        i === activeIndex
+                          ? 'opacity-100 scale-100'
+                          : 'opacity-0 scale-105'
+                      }`}
                     >
                       {m.type === 'image' ? (
                         <img
                           src={m.url}
                           alt=""
-                          className={`w-full h-full object-cover ${blurClass} scale-110 brightness-[0.4]`}
+                          className={`w-full h-full object-cover ${blurClass} scale-110 brightness-[0.35]`}
                           draggable={false}
                         />
                       ) : (
@@ -383,18 +432,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                   ))}
 
                   {/* Dark gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/70" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/80" />
 
                   {/* Lock icon + price overlay — centered */}
                   <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
-                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
+                    <div className="w-16 h-16 rounded-full bg-white/8 backdrop-blur-xl flex items-center justify-center border border-white/15 shadow-2xl">
                       <Lock size={26} className="text-white" />
                     </div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/50">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/40">
                       Unlock for
                     </p>
                     <p className="text-4xl font-extrabold text-white tracking-tight">
-                      ${priceDisplay} <span className="text-base font-semibold text-white/50">USD</span>
+                      ${priceDisplay} <span className="text-base font-semibold text-white/40">USD</span>
                     </p>
                   </div>
 
@@ -403,14 +452,14 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     <>
                       <button
                         onClick={goPrev}
-                        className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-sm transition-all z-10"
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-md transition-all hover:scale-110 active:scale-95 z-10"
                         aria-label="Previous image"
                       >
                         <ChevronLeft size={18} />
                       </button>
                       <button
                         onClick={goNext}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-sm transition-all z-10"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-md transition-all hover:scale-110 active:scale-95 z-10"
                         aria-label="Next image"
                       >
                         <ChevronRight size={18} />
@@ -420,23 +469,23 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
                   {/* Image counter badge — top right */}
                   {allMedia.length > 1 && (
-                    <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-xs text-white font-medium z-10">
+                    <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-xs text-white/90 font-medium z-10 border border-white/10">
                       {content.media_type === 'image' ? <ImageIcon size={11} /> : <Video size={11} />}
                       {activeIndex + 1} / {allMedia.length}
                     </div>
                   )}
 
-                  {/* Small image indicator icons — bottom of card */}
+                  {/* Small image indicator icons — bottom center of card */}
                   {allMedia.length > 1 && (
-                    <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
                       {allMedia.map((m, i) => (
                         <button
                           key={i}
                           onClick={() => setActiveIndex(i)}
-                          className={`w-8 h-8 rounded-lg overflow-hidden border-2 transition-all ${
+                          className={`rounded-lg overflow-hidden border-2 transition-all duration-300 ${
                             i === activeIndex
-                              ? 'border-white scale-110 opacity-100'
-                              : 'border-white/25 opacity-45 hover:opacity-75'
+                              ? 'border-white scale-125 opacity-100 w-9 h-9'
+                              : 'border-white/20 opacity-40 hover:opacity-70 w-7 h-7'
                           }`}
                           aria-label={`Go to image ${i + 1}`}
                         >
@@ -444,7 +493,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                             <img src={m.url} alt="" className={`w-full h-full object-cover ${thumbBlurClass}`} />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                              <Video size={11} className="text-white/50" />
+                              <Video size={11} className="text-white/40" />
                             </div>
                           )}
                         </button>
@@ -456,12 +505,12 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             </div>
 
             {/* 2. Creator & Post Information Section */}
-            <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 shadow-lg">
+            <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               {/* Creator row */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
-                  className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center overflow-hidden ring-2 ring-zinc-700/50 shrink-0"
+                  className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-zinc-800 shrink-0"
                 >
                   {content.creator?.avatar_url ? (
                     <img src={content.creator.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -477,14 +526,14 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     <p className="text-sm font-bold text-white truncate">
                       {content.creator?.display_name || content.creator?.username || 'Unknown'}
                     </p>
-                    <BadgeCheck size={15} className="text-indigo-400 shrink-0" />
+                    <BadgeCheck size={16} className="text-indigo-400 shrink-0" fill="currentColor" />
                   </div>
                   <p className="text-xs text-zinc-500">@{content.creator?.username || 'creator'}</p>
                 </div>
 
                 <button
                   onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-800 text-zinc-200 text-xs font-semibold hover:bg-zinc-700 transition-colors shrink-0"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-800/80 text-zinc-200 text-xs font-semibold hover:bg-zinc-700/80 transition-colors shrink-0"
                 >
                   View Profile
                   <ArrowRight size={12} />
@@ -492,21 +541,21 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
 
               {/* Divider */}
-              <div className="my-4 border-t border-zinc-800" />
+              <div className="my-4 border-t border-zinc-800/60" />
 
               {/* Tags */}
-              <div className="flex items-center gap-2 mb-3">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-[11px] font-semibold text-rose-400">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/25 text-[11px] font-semibold text-rose-400">
                   <AlertTriangle size={10} />
                   18+ only
                 </span>
                 {content.media_count > 1 && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-[11px] font-semibold text-indigo-400">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[11px] font-semibold text-indigo-400">
                     <ImageIcon size={10} />
                     {content.media_count} {content.media_type === 'image' ? 'images' : 'files'}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-[11px] font-medium text-zinc-400">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800/60 border border-zinc-700/50 text-[11px] font-medium text-zinc-400">
                   <Eye size={10} />
                   {content.views_count || 0} views
                 </span>
@@ -522,7 +571,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             </div>
 
             {/* 3. Purchase & Trust Indicators */}
-            <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 shadow-lg">
+            <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               {/* Email input (guests only) */}
               {!user && (
                 <div className="mb-4">
@@ -539,7 +588,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                         if (emailError) setEmailError(null);
                       }}
                       placeholder="you@example.com"
-                      className="w-full rounded-xl bg-zinc-950 border border-zinc-700 pl-10 pr-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      className="w-full rounded-xl bg-[#0B0B0F] border border-zinc-800 pl-10 pr-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/15 transition-all"
                     />
                   </div>
                   <p className="text-xs text-zinc-500 mt-1.5">
@@ -551,11 +600,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </div>
               )}
 
-              {/* Green CTA button */}
+              {/* Blue/Purple gradient CTA button */}
               <button
                 onClick={onPayToUnlock}
                 disabled={paying}
-                className="w-full rounded-xl bg-emerald-500 text-white font-bold text-base py-3.5 hover:bg-emerald-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] active:shadow-emerald-500/10"
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-[0.98] active:shadow-indigo-600/15"
               >
                 {paying ? (
                   <>
@@ -573,7 +622,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               {/* Trust indicators */}
               <div className="flex items-center justify-center gap-5 mt-4">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <ShieldCheck size={14} className="text-emerald-500" />
+                  <ShieldCheck size={14} className="text-indigo-400" />
                   Secure payment
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
@@ -593,7 +642,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             </div>
 
             {/* 4. Footer Legal & Support Links */}
-            <div className="flex items-center justify-center gap-4 pt-2 pb-6">
+            <div className="flex items-center justify-center gap-4 pt-2 pb-8">
               <button
                 onClick={() => onNavigate('terms')}
                 className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
