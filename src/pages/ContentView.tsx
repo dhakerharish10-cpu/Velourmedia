@@ -342,56 +342,45 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
           </div>
         ) : (
           /* ---- LOCKED UNLOCK VIEW — redesigned ---- */
-          <div className="space-y-5">
-            {/* 1. 3D Stacked Card Carousel with Blurred Previews */}
-            <div className="relative pb-6 -mt-2" style={{ perspective: '1400px' }}>
-              {/* 3D stacked card backdrop layers — lifted upward */}
+          <div className="space-y-4">
+            {/* 1. Bright 3D Stacked Card Preview */}
+            <div className="relative pb-3" style={{ perspective: '1200px' }}>
+              {/* Staggered 3D backdrop cards — layered, subtle shadows, clean borders */}
               {allMedia.length > 1 && (
                 <>
                   <div
-                    className="absolute rounded-[28px] bg-[#1a1a22] border border-white/[0.06]"
+                    className="absolute rounded-[24px] bg-white/5 border border-white/10"
                     style={{
-                      top: 20,
-                      left: 24,
-                      right: 24,
-                      bottom: -8,
-                      transform: 'rotateX(8deg) translateZ(-50px) translateY(18px)',
-                      boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                      top: 14,
+                      left: 18,
+                      right: 18,
+                      bottom: -6,
+                      transform: 'translateY(10px) scale(0.97)',
+                      boxShadow: '0 16px 48px rgba(0,0,0,0.35)',
                     }}
                   />
                   <div
-                    className="absolute rounded-[28px] bg-[#22222e] border border-white/[0.08]"
+                    className="absolute rounded-[24px] bg-white/[0.07] border border-white/[0.12]"
                     style={{
-                      top: 12,
-                      left: 14,
-                      right: 14,
-                      bottom: -4,
-                      transform: 'rotateX(6deg) translateZ(-25px) translateY(10px)',
-                      boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-                    }}
-                  />
-                  <div
-                    className="absolute rounded-[28px] bg-[#2a2a38] border border-white/[0.1]"
-                    style={{
-                      top: 5,
-                      left: 6,
-                      right: 6,
-                      bottom: 0,
-                      transform: 'rotateX(3deg) translateZ(-10px) translateY(4px)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
+                      top: 8,
+                      left: 10,
+                      right: 10,
+                      bottom: -3,
+                      transform: 'translateY(5px) scale(0.98)',
+                      boxShadow: '0 8px 28px rgba(0,0,0,0.25)',
                     }}
                   />
                 </>
               )}
 
-              {/* Main preview card — high contrast, lifted */}
+              {/* Main preview card — bright, clean, rounded border */}
               <div
-                className="relative rounded-[28px] overflow-hidden bg-[#0f0f14] border border-white/10 shadow-2xl shadow-black/60 transition-transform duration-300 hover:scale-[1.01]"
-                style={{ transform: 'rotateX(2deg) translateZ(0) translateY(-8px)', transformStyle: 'preserve-3d' }}
+                className="relative rounded-[24px] overflow-hidden bg-zinc-900 border-2 border-white/15 shadow-2xl shadow-black/40 transition-transform duration-300 hover:scale-[1.005]"
+                style={{ transformStyle: 'preserve-3d' }}
               >
-                {/* Blurred media preview per carousel item */}
+                {/* Blurred media preview — bright, natural, no dark tint */}
                 <div
-                  className="relative aspect-[4/5] sm:aspect-[4/3] flex items-center justify-center select-none"
+                  className="relative aspect-[4/5] sm:aspect-[4/3] select-none"
                   onContextMenu={(e) => e.preventDefault()}
                   onDragStart={(e) => e.preventDefault()}
                   onTouchStart={onTouchStart}
@@ -401,7 +390,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                   {allMedia.map((m, i) => (
                     <div
                       key={i}
-                      className={`absolute inset-0 transition-all duration-700 ease-out ${
+                      className={`absolute inset-0 transition-all duration-600 ease-out ${
                         i === activeIndex
                           ? 'opacity-100 scale-100'
                           : 'opacity-0 scale-105'
@@ -411,7 +400,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                         <img
                           src={m.url}
                           alt=""
-                          className={`w-full h-full object-cover ${blurClass} scale-125 brightness-[0.5] saturate-150`}
+                          className={`w-full h-full object-cover ${blurClass} scale-110 brightness-105 saturate-120`}
                           draggable={false}
                         />
                       ) : (
@@ -422,37 +411,22 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </div>
                   ))}
 
-                  {/* Clean gradient overlay — brighter top, deeper bottom */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/90" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#6366f1]/10 via-transparent to-transparent" />
-
-                  {/* Lock icon + price overlay — centered, bright */}
-                  <div className="relative z-10 flex flex-col items-center gap-4 px-6 text-center">
-                    <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-2xl flex items-center justify-center border-2 border-white/25 shadow-2xl shadow-black/40">
-                      <Lock size={30} className="text-white drop-shadow-lg" />
-                    </div>
-                    <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/50">
-                      Unlock for
-                    </p>
-                    <p className="text-5xl font-extrabold text-white tracking-tight drop-shadow-xl">
-                      ${priceDisplay}
-                    </p>
-                    <p className="text-sm font-medium text-white/40">USD one-time</p>
-                  </div>
+                  {/* Subtle bottom-to-top fade only — keeps previews bright */}
+                  <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
                   {/* Carousel nav arrows */}
                   {allMedia.length > 1 && (
                     <>
                       <button
                         onClick={goPrev}
-                        className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-md transition-all hover:scale-110 active:scale-95 z-10"
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/15 backdrop-blur-md text-white hover:bg-white/25 transition-all hover:scale-110 active:scale-95 z-10 border border-white/20"
                         aria-label="Previous image"
                       >
                         <ChevronLeft size={18} />
                       </button>
                       <button
                         onClick={goNext}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-md transition-all hover:scale-110 active:scale-95 z-10"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/15 backdrop-blur-md text-white hover:bg-white/25 transition-all hover:scale-110 active:scale-95 z-10 border border-white/20"
                         aria-label="Next image"
                       >
                         <ChevronRight size={18} />
@@ -462,53 +436,70 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
                   {/* Image counter badge — top right */}
                   {allMedia.length > 1 && (
-                    <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-xs text-white/90 font-medium z-10 border border-white/10">
+                    <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs text-white font-medium z-10 border border-white/20">
                       {content.media_type === 'image' ? <ImageIcon size={11} /> : <Video size={11} />}
                       {activeIndex + 1} / {allMedia.length}
                     </div>
                   )}
 
-                  {/* Clean rounded thumbnail indicators — bottom center */}
-                  {allMedia.length > 1 && (
-                    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2.5 z-10">
-                      {allMedia.map((m, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setActiveIndex(i)}
-                          className={`rounded-full overflow-hidden border-2 transition-all duration-300 shadow-lg ${
-                            i === activeIndex
-                              ? 'border-white scale-110 opacity-100 w-11 h-11'
-                              : 'border-white/25 opacity-50 hover:opacity-80 hover:border-white/50 w-8 h-8'
-                          }`}
-                          aria-label={`Go to image ${i + 1}`}
-                        >
-                          {m.type === 'image' ? (
-                            <img src={m.url} alt="" className={`w-full h-full object-cover ${thumbBlurClass}`} />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                              <Video size={12} className="text-white/50" />
-                            </div>
-                          )}
-                        </button>
-                      ))}
+                  {/* Lock badge — top left, minimal */}
+                  <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs text-white font-medium z-10 border border-white/20">
+                    <Lock size={11} />
+                    Locked
+                  </div>
+
+                  {/* Bottom overlay: price + email + thumbnails — unified checkout zone */}
+                  <div className="absolute inset-x-0 bottom-0 z-10 px-5 pb-4 pt-12 flex flex-col items-center gap-3">
+                    {/* Price */}
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-3xl font-extrabold text-white tracking-tight drop-shadow-lg">
+                        ${priceDisplay}
+                      </p>
+                      <p className="text-[11px] font-medium text-white/60 uppercase tracking-wider">One-time USD</p>
                     </div>
-                  )}
+
+                    {/* Thumbnail row — neat, bottom center */}
+                    {allMedia.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        {allMedia.map((m, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setActiveIndex(i)}
+                            className={`rounded-lg overflow-hidden border-2 transition-all duration-300 ${
+                              i === activeIndex
+                                ? 'border-white scale-110 opacity-100 w-9 h-9'
+                                : 'border-white/30 opacity-60 hover:opacity-90 hover:border-white/60 w-7 h-7'
+                            }`}
+                            aria-label={`Go to image ${i + 1}`}
+                          >
+                            {m.type === 'image' ? (
+                              <img src={m.url} alt="" className={`w-full h-full object-cover ${thumbBlurClass}`} />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                <Video size={10} className="text-white/50" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* 2. Creator & Post Information Section */}
+            {/* 2. Creator & Post Information */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               {/* Creator row */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
-                  className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-zinc-800 shrink-0"
+                  className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-zinc-800 shrink-0"
                 >
                   {content.creator?.avatar_url ? (
                     <img src={content.creator.avatar_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-lg font-bold text-white uppercase">
+                    <span className="text-base font-bold text-white uppercase">
                       {(content.creator?.display_name || content.creator?.username || 'C')[0]}
                     </span>
                   )}
@@ -519,14 +510,14 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     <p className="text-sm font-bold text-white truncate">
                       {content.creator?.display_name || content.creator?.username || 'Unknown'}
                     </p>
-                    <BadgeCheck size={16} className="text-indigo-400 shrink-0" fill="currentColor" />
+                    <BadgeCheck size={15} className="text-indigo-400 shrink-0" fill="currentColor" />
                   </div>
                   <p className="text-xs text-zinc-500">@{content.creator?.username || 'creator'}</p>
                 </div>
 
                 <button
                   onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-800/80 text-zinc-200 text-xs font-semibold hover:bg-zinc-700/80 transition-colors shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800/80 text-zinc-200 text-xs font-semibold hover:bg-zinc-700/80 transition-colors shrink-0"
                 >
                   View Profile
                   <ArrowRight size={12} />
@@ -534,10 +525,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
 
               {/* Divider */}
-              <div className="my-4 border-t border-zinc-800/60" />
+              <div className="my-3.5 border-t border-zinc-800/60" />
 
-              {/* Tags — essential info only */}
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {/* Tags */}
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                 {content.media_count > 1 && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[11px] font-semibold text-indigo-400">
                     <ImageIcon size={10} />
@@ -551,20 +542,17 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
               {/* Description */}
               {content.description && (
-                <p className="text-sm text-zinc-400 mt-2.5 leading-relaxed">{content.description}</p>
+                <p className="text-sm text-zinc-400 mt-2 leading-relaxed">{content.description}</p>
               )}
             </div>
 
-            {/* 3. Purchase & Trust Indicators */}
+            {/* 3. Checkout — email + unlock button in one cohesive block */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
-              {/* Email input (guests only) */}
+              {/* Email input (guests only) — integrated seamlessly */}
               {!user && (
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-                    Email Address
-                  </label>
+                <div className="mb-3.5">
                   <div className="relative">
-                    <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                    <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
                     <input
                       type="email"
                       value={guestEmail}
@@ -572,24 +560,21 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                         setGuestEmail(e.target.value);
                         if (emailError) setEmailError(null);
                       }}
-                      placeholder="you@example.com"
-                      className="w-full rounded-xl bg-[#0B0B0F] border border-zinc-800 pl-10 pr-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                      placeholder="Enter your email to unlock"
+                      className="w-full rounded-xl bg-[#0B0B0F] border border-zinc-800 pl-11 pr-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
                     />
                   </div>
-                  <p className="text-xs text-zinc-500 mt-1.5">
-                    Your access link will be sent to this email after payment.
-                  </p>
                   {emailError && (
-                    <p className="text-xs text-rose-400 mt-1.5">{emailError}</p>
+                    <p className="text-xs text-rose-400 mt-2">{emailError}</p>
                   )}
                 </div>
               )}
 
-              {/* Blue/Purple gradient CTA button */}
+              {/* Unlock button — clean, full-width */}
               <button
                 onClick={onPayToUnlock}
                 disabled={paying}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-[0.98] active:shadow-indigo-600/15"
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98]"
               >
                 {paying ? (
                   <>
@@ -605,7 +590,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </button>
 
               {/* Trust indicators */}
-              <div className="flex items-center justify-center gap-5 mt-4">
+              <div className="flex items-center justify-center gap-5 mt-3.5">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                   <ShieldCheck size={14} className="text-indigo-400" />
                   Secure payment
@@ -616,8 +601,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </div>
               </div>
 
-              {/* Tax subtext */}
-              <p className="text-center text-[11px] text-zinc-600 mt-2.5">
+              <p className="text-center text-[11px] text-zinc-600 mt-2">
                 Tax calculated next step
               </p>
 
