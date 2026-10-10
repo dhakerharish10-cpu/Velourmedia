@@ -1,6 +1,6 @@
 import type { Content } from '../lib/types';
 import { useStore } from '../lib/store';
-import { ImageIcon, Video, Lock, Layers, TrendingUp } from 'lucide-react';
+import { ImageIcon, Video, Lock, Layers } from 'lucide-react';
 
 interface ContentCardProps {
   content: Content;
@@ -72,13 +72,7 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
                 Unlocked
               </span>
             ) : (
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-indigo-600 dark:text-indigo-400">${Number(content.price).toFixed(2)}</span>
-                <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  <TrendingUp size={9} />
-                  Earns ${(Number(content.price) * 0.7).toFixed(2)}
-                </span>
-              </div>
+              <span className="text-indigo-600 dark:text-indigo-400">${Number(content.price).toFixed(2)}</span>
             )}
           </div>
         </div>

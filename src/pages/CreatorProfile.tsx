@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase';
 import { Navbar } from '../components/Navbar';
 import { ContentCard } from '../components/ContentCard';
 import { AuthModal } from '../components/AuthModal';
-import { GuestAgeGate } from '../components/AgeGate';
 import type { Profile, Content } from '../lib/types';
 import { User as UserIcon, ArrowLeft, Crown, Check } from 'lucide-react';
 
@@ -14,11 +13,10 @@ interface CreatorProfileProps {
 }
 
 export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
-  const { user, isSubscribed, openAuth } = useStore();
+  const { user, isSubscribed } = useStore();
   const [creator, setCreator] = useState<Profile | null>(null);
   const [content, setContent] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
-  const [guestAgeVerified, setGuestAgeVerified] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -54,10 +52,6 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
 
   const onSubscribeClick = () => {
     if (!creator) return;
-    if (!user) {
-      openAuth('signin');
-      return;
-    }
     onNavigate(`c/${creator.username}/subscribe`);
   };
 
@@ -66,10 +60,7 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
       <Navbar onNavigate={onNavigate} />
       <AuthModal onNavigate={onNavigate} />
 
-      {/* Guest age gate — only for unauthenticated visitors */}
-      {!user && !guestAgeVerified && !loading && creator && (
-        <GuestAgeGate onConfirm={() => setGuestAgeVerified(true)} />
-      )}
+      {/* Guest age gate removed for friction-free checkout */}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <button

@@ -3,12 +3,11 @@ import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
-import { GuestAgeGate } from '../components/AgeGate';
 import type { Content, ContentMedia } from '../lib/types';
 import {
   ArrowLeft, Lock, Check, Loader2, ImageIcon, Video,
-  ChevronLeft, ChevronRight, BadgeCheck, Mail, ArrowRight, Eye, Heart,
-  ShieldCheck, Zap, AlertTriangle, FileText, Flag,
+  ChevronLeft, ChevronRight, BadgeCheck, Mail, ArrowRight, Heart,
+  ShieldCheck, Zap, FileText, Flag,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 50;
@@ -34,7 +33,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const [subAccess, setSubAccess] = useState(false);
   const [guestUnlocked, setGuestUnlocked] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
-  const [guestAgeVerified, setGuestAgeVerified] = useState(false);
   const [guestEmail, setGuestEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [justPurchased, setJustPurchased] = useState(false);
@@ -187,10 +185,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       <Navbar onNavigate={onNavigate} />
       <AuthModal onNavigate={onNavigate} />
 
-      {!user && !guestAgeVerified && !isFree && !hasAccess && content && (
-        <GuestAgeGate onConfirm={() => setGuestAgeVerified(true)} />
-      )}
-
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button
           onClick={() => onNavigate('')}
@@ -308,9 +302,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     <ImageIcon size={10} /> {content.media_count} files
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <Eye size={10} /> {content.views_count || 0} views
-                </span>
               </div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">{content.title}</h1>
               <button
@@ -353,50 +344,50 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
           /* ---- LOCKED UNLOCK VIEW — redesigned ---- */
           <div className="space-y-5">
             {/* 1. 3D Stacked Card Carousel with Blurred Previews */}
-            <div className="relative pb-3" style={{ perspective: '1200px' }}>
-              {/* 3D stacked card backdrop layers */}
+            <div className="relative pb-6 -mt-2" style={{ perspective: '1400px' }}>
+              {/* 3D stacked card backdrop layers — lifted upward */}
               {allMedia.length > 1 && (
                 <>
                   <div
-                    className="absolute rounded-3xl bg-[#15151B] border border-zinc-800/60"
+                    className="absolute rounded-[28px] bg-[#1a1a22] border border-white/[0.06]"
+                    style={{
+                      top: 20,
+                      left: 24,
+                      right: 24,
+                      bottom: -8,
+                      transform: 'rotateX(8deg) translateZ(-50px) translateY(18px)',
+                      boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                    }}
+                  />
+                  <div
+                    className="absolute rounded-[28px] bg-[#22222e] border border-white/[0.08]"
                     style={{
                       top: 12,
-                      left: 20,
-                      right: 20,
-                      bottom: -12,
-                      transform: 'translateZ(-40px)',
-                      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                      left: 14,
+                      right: 14,
+                      bottom: -4,
+                      transform: 'rotateX(6deg) translateZ(-25px) translateY(10px)',
+                      boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
                     }}
                   />
                   <div
-                    className="absolute rounded-3xl bg-[#1A1A22] border border-zinc-800/50"
+                    className="absolute rounded-[28px] bg-[#2a2a38] border border-white/[0.1]"
                     style={{
-                      top: 7,
-                      left: 12,
-                      right: 12,
-                      bottom: -7,
-                      transform: 'translateZ(-20px)',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                    }}
-                  />
-                  <div
-                    className="absolute rounded-3xl bg-[#1E1E28] border border-zinc-800/40"
-                    style={{
-                      top: 3,
-                      left: 5,
-                      right: 5,
-                      bottom: -3,
-                      transform: 'translateZ(-8px)',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      top: 5,
+                      left: 6,
+                      right: 6,
+                      bottom: 0,
+                      transform: 'rotateX(3deg) translateZ(-10px) translateY(4px)',
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
                     }}
                   />
                 </>
               )}
 
-              {/* Main preview card */}
+              {/* Main preview card — high contrast, lifted */}
               <div
-                className="relative rounded-3xl overflow-hidden bg-[#131318] border border-zinc-800/50 shadow-2xl shadow-black/50 transition-transform duration-300"
-                style={{ transform: 'translateZ(0)', transformStyle: 'preserve-3d' }}
+                className="relative rounded-[28px] overflow-hidden bg-[#0f0f14] border border-white/10 shadow-2xl shadow-black/60 transition-transform duration-300 hover:scale-[1.01]"
+                style={{ transform: 'rotateX(2deg) translateZ(0) translateY(-8px)', transformStyle: 'preserve-3d' }}
               >
                 {/* Blurred media preview per carousel item */}
                 <div
@@ -420,7 +411,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                         <img
                           src={m.url}
                           alt=""
-                          className={`w-full h-full object-cover ${blurClass} scale-110 brightness-[0.35]`}
+                          className={`w-full h-full object-cover ${blurClass} scale-125 brightness-[0.5] saturate-150`}
                           draggable={false}
                         />
                       ) : (
@@ -431,20 +422,22 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </div>
                   ))}
 
-                  {/* Dark gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/80" />
+                  {/* Clean gradient overlay — brighter top, deeper bottom */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/90" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#6366f1]/10 via-transparent to-transparent" />
 
-                  {/* Lock icon + price overlay — centered */}
-                  <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
-                    <div className="w-16 h-16 rounded-full bg-white/8 backdrop-blur-xl flex items-center justify-center border border-white/15 shadow-2xl">
-                      <Lock size={26} className="text-white" />
+                  {/* Lock icon + price overlay — centered, bright */}
+                  <div className="relative z-10 flex flex-col items-center gap-4 px-6 text-center">
+                    <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-2xl flex items-center justify-center border-2 border-white/25 shadow-2xl shadow-black/40">
+                      <Lock size={30} className="text-white drop-shadow-lg" />
                     </div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/40">
+                    <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/50">
                       Unlock for
                     </p>
-                    <p className="text-4xl font-extrabold text-white tracking-tight">
-                      ${priceDisplay} <span className="text-base font-semibold text-white/40">USD</span>
+                    <p className="text-5xl font-extrabold text-white tracking-tight drop-shadow-xl">
+                      ${priceDisplay}
                     </p>
+                    <p className="text-sm font-medium text-white/40">USD one-time</p>
                   </div>
 
                   {/* Carousel nav arrows */}
@@ -475,17 +468,17 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </div>
                   )}
 
-                  {/* Small image indicator icons — bottom center of card */}
+                  {/* Clean rounded thumbnail indicators — bottom center */}
                   {allMedia.length > 1 && (
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+                    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2.5 z-10">
                       {allMedia.map((m, i) => (
                         <button
                           key={i}
                           onClick={() => setActiveIndex(i)}
-                          className={`rounded-lg overflow-hidden border-2 transition-all duration-300 ${
+                          className={`rounded-full overflow-hidden border-2 transition-all duration-300 shadow-lg ${
                             i === activeIndex
-                              ? 'border-white scale-125 opacity-100 w-9 h-9'
-                              : 'border-white/20 opacity-40 hover:opacity-70 w-7 h-7'
+                              ? 'border-white scale-110 opacity-100 w-11 h-11'
+                              : 'border-white/25 opacity-50 hover:opacity-80 hover:border-white/50 w-8 h-8'
                           }`}
                           aria-label={`Go to image ${i + 1}`}
                         >
@@ -493,7 +486,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                             <img src={m.url} alt="" className={`w-full h-full object-cover ${thumbBlurClass}`} />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                              <Video size={11} className="text-white/40" />
+                              <Video size={12} className="text-white/50" />
                             </div>
                           )}
                         </button>
@@ -543,22 +536,14 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               {/* Divider */}
               <div className="my-4 border-t border-zinc-800/60" />
 
-              {/* Tags */}
+              {/* Tags — essential info only */}
               <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/25 text-[11px] font-semibold text-rose-400">
-                  <AlertTriangle size={10} />
-                  18+ only
-                </span>
                 {content.media_count > 1 && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[11px] font-semibold text-indigo-400">
                     <ImageIcon size={10} />
                     {content.media_count} {content.media_type === 'image' ? 'images' : 'files'}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800/60 border border-zinc-700/50 text-[11px] font-medium text-zinc-400">
-                  <Eye size={10} />
-                  {content.views_count || 0} views
-                </span>
               </div>
 
               {/* Title */}

@@ -31,8 +31,6 @@ export function Subscribe({ username, onNavigate }: SubscribeProps) {
     isSubscribed,
     checkSubscription,
     handleSubscriptionPayment,
-    openAuth,
-    addToast,
   } = useStore();
 
   const [creator, setCreator] = useState<Profile | null>(null);
@@ -102,12 +100,6 @@ export function Subscribe({ username, onNavigate }: SubscribeProps) {
     setTouched(true);
     if (!formValid) return;
     if (!creator || !hasPrice) return;
-
-    if (!user) {
-      openAuth('signup');
-      addToast('Create an account to complete your subscription.', 'info');
-      return;
-    }
 
     setPaying(true);
     await handleSubscriptionPayment(creator.id);
