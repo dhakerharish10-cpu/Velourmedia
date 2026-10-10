@@ -9,6 +9,11 @@ interface MediaFile {
   type: 'image' | 'video';
 }
 
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
+
 export function UploadContent({ onDone }: { onDone?: () => void }) {
   const { user, activeProfileId, addToast, refreshMyContent, refreshFeed } = useStore();
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
@@ -33,18 +38,37 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
   const handleFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
     const newFiles: MediaFile[] = [];
+    const errors: string[] = [];
     Array.from(fileList).forEach((file) => {
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
-      if (!isImage && !isVideo) return;
+      if (!isImage && !isVideo) {
+        errors.push(`${file.name}: not a valid image or video file.`);
+        return;
+      }
+      if (isImage && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: unsupported image format. Use JPG, PNG, WebP, GIF, or AVIF.`);
+        return;
+      }
+      if (isVideo && !ALLOWED_VIDEO_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: unsupported video format. Use MP4, WebM, or MOV.`);
+        return;
+      }
+      const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+      if (file.size > maxSize) {
+        const limitMB = Math.round(maxSize / (1024 * 1024));
+        errors.push(`${file.name}: file is too large. Max ${limitMB} MB for ${isImage ? 'images' : 'videos'}.`);
+        return;
+      }
       newFiles.push({
         file,
         preview: URL.createObjectURL(file),
         type: isImage ? 'image' : 'video',
       });
     });
+    errors.forEach((msg) => addToast(msg, 'error'));
     if (newFiles.length === 0) {
-      addToast('Please select image or video files.', 'error');
+      if (errors.length === 0) addToast('Please select image or video files.', 'error');
       return;
     }
     setMediaFiles((prev) => [...prev, ...newFiles]);
@@ -88,12 +112,19 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       const uploadedUrls: { url: string; type: 'image' | 'video' }[] = [];
 
       for (const media of mediaFiles) {
-        const fileExt = media.file.name.split('.').pop();
+        const fileExt = media.file.name.split('.').pop() || (media.type === 'image' ? 'jpg' : 'mp4');
         const fileName = `${creatorId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('creator-media')
-          .upload(fileName, media.file);
-        if (uploadError) throw uploadError;
+          .upload(fileName, media.file, {
+            contentType: media.file.type || (media.type === 'image' ? 'image/jpeg' : 'video/mp4'),
+            cacheControl: '3600',
+            upsert: false,
+          });
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          throw new Error(`Failed to upload ${media.file.name}: ${uploadError.message}`);
+        }
         const { data: urlData } = supabase.storage
           .from('creator-media')
           .getPublicUrl(fileName);
@@ -149,6 +180,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       onDone?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed.';
+      console.error('Upload failed:', err);
       addToast(message, 'error');
     } finally {
       setUploading(false);
