@@ -28,6 +28,7 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
     user, profile, myContent, earnings, getSubscriptionLink, addToast,
     openPersonaSwitcher, profiles, openProfileEdit, openUpload,
     deleteContent, togglePrivate, togglePublished, duplicateContent,
+    salesVisibilityPercent,
   } = useStore();
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState<FilterTab>('ALL');
@@ -53,7 +54,10 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
 
   const profileLink = profile?.username ? getSubscriptionLink(profile.username) : '';
   const totalViews = myContent.reduce((sum, item) => sum + (item.views_count || 0), 0);
-  const totalRevenue = Number(earnings?.content_revenue || 0) + Number(earnings?.subscription_revenue || 0);
+  const ratio = salesVisibilityPercent / 100;
+  const visibleContentRevenue = Number(earnings?.content_revenue || 0) * ratio;
+  const visibleSubscriptionRevenue = Number(earnings?.subscription_revenue || 0) * ratio;
+  const totalRevenue = visibleContentRevenue + visibleSubscriptionRevenue;
 
   const handleCopyProfileLink = async () => {
     if (!profileLink) return;
@@ -338,14 +342,14 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
                           <Eye size={12} /> {item.views_count || 0}
                         </span>
                         <span className="flex items-center gap-1 text-xs text-slate-500">
-                          <ShoppingBag size={12} /> {item.sales_count || 0}
+                          <ShoppingBag size={12} /> {Math.round((item.sales_count || 0) * ratio)}
                         </span>
                         <span className="flex items-center gap-1 text-xs text-slate-500">
                           ${Number(item.price).toFixed(2)}
                         </span>
                         {earned > 0 && (
                           <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                            Earned: ${earned.toFixed(2)}
+                            Earned: ${(earned * ratio).toFixed(2)}
                           </span>
                         )}
                       </div>
@@ -419,15 +423,16 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
 }
 
 export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: (path: string) => void }) {
-  const { user, myContent, earnings } = useStore();
+  const { user, myContent, earnings, salesVisibilityPercent } = useStore();
 
   if (!user) return null;
 
+  const ratio = salesVisibilityPercent / 100;
   const totalViews = myContent.reduce((sum, item) => sum + (item.views_count || 0), 0);
-  const grossRevenue = Number(earnings?.content_revenue || 0) + Number(earnings?.subscription_revenue || 0);
-  const platformFees = Number(earnings?.platform_fees_paid || 0);
+  const grossRevenue = (Number(earnings?.content_revenue || 0) + Number(earnings?.subscription_revenue || 0)) * ratio;
+  const platformFees = Number(earnings?.platform_fees_paid || 0) * ratio;
   const netRevenue = grossRevenue - platformFees;
-  const totalSales = earnings?.total_sales || 0;
+  const totalSales = Math.round((earnings?.total_sales || 0) * ratio);
 
   const sortedByViews = [...myContent].sort((a, b) => (b.views_count || 0) - (a.views_count || 0)).slice(0, 5);
 
@@ -451,11 +456,11 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
         <div className="space-y-3">
           <div className="flex items-center justify-between py-2 border-b border-slate-100">
             <span className="text-sm text-slate-600">Gross Content Sales</span>
-            <span className="text-sm font-semibold text-slate-900">${Number(earnings?.content_revenue || 0).toFixed(2)}</span>
+            <span className="text-sm font-semibold text-slate-900">${(Number(earnings?.content_revenue || 0) * ratio).toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-slate-100">
             <span className="text-sm text-slate-600">Gross Subscription Revenue</span>
-            <span className="text-sm font-semibold text-slate-900">${Number(earnings?.subscription_revenue || 0).toFixed(2)}</span>
+            <span className="text-sm font-semibold text-slate-900">${(Number(earnings?.subscription_revenue || 0) * ratio).toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-slate-100">
             <span className="text-sm text-slate-600">Platform Fee (30%)</span>

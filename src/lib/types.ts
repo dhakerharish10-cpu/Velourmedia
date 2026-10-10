@@ -17,6 +17,7 @@ export interface Profile {
   crypto_network: string;
   kyc_status: 'not_submitted' | 'pending' | 'approved' | 'rejected';
   is_suspended: boolean;
+  is_banned: boolean;
   created_at: string;
 }
 
@@ -128,3 +129,25 @@ export interface Payout {
 }
 
 export type ContentType = 'image' | 'video';
+
+export interface ContentReport {
+  id: string;
+  content_id: string | null;
+  reporter_id: string | null;
+  reason: string;
+  description: string | null;
+  status: 'pending' | 'actioned' | 'dismissed';
+  created_at: string;
+  actioned_by: string | null;
+  actioned_at: string | null;
+  content?: Content;
+}
+
+export interface SalesVisibility {
+  id: number;
+  profile_id: string | null;
+  visible_ratio: number;
+  sales_hidden: boolean;
+  updated_at: string;
+  updated_by: string | null;
+}

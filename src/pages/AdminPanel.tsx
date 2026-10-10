@@ -3,12 +3,16 @@ import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
-import type { Profile, Content, Purchase, Payout, BankDetails } from '../lib/types';
+import type { Profile, Content, Purchase, Payout, BankDetails, ContentReport } from '../lib/types';
 import {
   Shield, Users, DollarSign, ArrowLeft, Percent, Save, TrendingUp, Wallet,
   CheckCircle, XCircle, Clock, Ban, Power, Eye, EyeOff, Trash2, FileCheck,
-  Banknote, Bitcoin,
+  Banknote, Bitcoin, Flag, Receipt, SlidersHorizontal,
 } from 'lucide-react';
+import { DmcaTab } from '../components/admin/DmcaTab';
+import { TransactionsTab } from '../components/admin/TransactionsTab';
+import { SecurityTab } from '../components/admin/SecurityTab';
+import { SalesManagementTab } from '../components/admin/SalesManagementTab';
 
 interface AdminStats {
   total_gross_volume: number;
@@ -18,7 +22,7 @@ interface AdminStats {
   pending_payouts_count: number;
 }
 
-type Tab = 'overview' | 'kyc' | 'payouts' | 'creators' | 'content';
+type Tab = 'overview' | 'kyc' | 'payouts' | 'creators' | 'content' | 'dmca' | 'transactions' | 'security' | 'sales';
 
 interface AdminPanelProps {
   onNavigate: (path: string) => void;
@@ -31,6 +35,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [allContent, setAllContent] = useState<Content[]>([]);
   const [allPurchases, setAllPurchases] = useState<Purchase[]>([]);
   const [payouts, setPayouts] = useState<(Payout & { profile?: Profile })[]>([]);
+  const [reports, setReports] = useState<ContentReport[]>([]);
   const [bankDetailsMap, setBankDetailsMap] = useState<Record<string, BankDetails>>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -43,13 +48,14 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
   }, [platformSettings]);
 
   const loadData = useCallback(async () => {
-    const [p, c, pu, pa, bd, st] = await Promise.all([
+    const [p, c, pu, pa, bd, st, cr] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('content').select('*, creator:profiles(*)').order('created_at', { ascending: false }),
       supabase.from('purchases').select('*, content:content(*, creator:profiles(*))').order('created_at', { ascending: false }),
       supabase.from('payouts').select('*, profile:profiles(*)').order('requested_at', { ascending: false }),
       supabase.from('bank_details').select('*'),
       supabase.rpc('get_admin_stats'),
+      supabase.from('content_reports').select('*, content:content(*)').order('created_at', { ascending: false }),
     ]);
 
     setProfiles((p.data || []) as Profile[]);
@@ -60,6 +66,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     (bd.data || []).forEach((b: BankDetails) => { bdMap[b.profile_id] = b; });
     setBankDetailsMap(bdMap);
     setStats(st.data as unknown as AdminStats);
+    setReports((cr.data || []) as ContentReport[]);
   }, []);
 
   const hasAdminAccess = !!profile?.is_admin || isAdminEmail;
@@ -192,8 +199,12 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const tabs: { id: Tab; label: string; icon: typeof Shield }[] = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
+    { id: 'sales', label: 'Sales Management', icon: SlidersHorizontal },
+    { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'kyc', label: 'KYC Review', icon: FileCheck },
     { id: 'payouts', label: 'Payouts', icon: Wallet },
+    { id: 'dmca', label: 'DMCA / Reports', icon: Flag },
+    { id: 'security', label: 'User Security', icon: Shield },
     { id: 'creators', label: 'Creators', icon: Users },
     { id: 'content', label: 'Content', icon: Eye },
   ];
@@ -235,6 +246,9 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
               ) : null}
               {tab.id === 'payouts' && stats?.pending_payouts_count ? (
                 <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === tab.id ? 'bg-white/20' : 'bg-amber-100 text-amber-600'}`}>{stats.pending_payouts_count}</span>
+              ) : null}
+              {tab.id === 'dmca' && reports.filter((r) => r.status === 'pending').length > 0 ? (
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === tab.id ? 'bg-white/20' : 'bg-amber-100 text-amber-600'}`}>{reports.filter((r) => r.status === 'pending').length}</span>
               ) : null}
             </button>
           ))}
@@ -592,6 +606,26 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
                   </table>
                 </div>
               </div>
+            )}
+
+            {/* ============ SALES MANAGEMENT ============ */}
+            {activeTab === 'sales' && (
+              <SalesManagementTab profiles={profiles} addToast={addToast} />
+            )}
+
+            {/* ============ TRANSACTIONS ============ */}
+            {activeTab === 'transactions' && (
+              <TransactionsTab purchases={allPurchases} />
+            )}
+
+            {/* ============ DMCA / REPORTS ============ */}
+            {activeTab === 'dmca' && (
+              <DmcaTab reports={reports} onReload={loadData} addToast={addToast} />
+            )}
+
+            {/* ============ USER SECURITY ============ */}
+            {activeTab === 'security' && (
+              <SecurityTab profiles={profiles} onReload={loadData} addToast={addToast} />
             )}
           </>
         )}

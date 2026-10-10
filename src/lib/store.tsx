@@ -35,6 +35,8 @@ interface StoreContextValue {
   bankDetails: BankDetails | null;
   payouts: Payout[];
   platformSettings: PlatformSettings | null;
+  salesVisibilityPercent: number;
+  refreshSalesVisibility: () => Promise<void>;
   setAgeVerified: (v: boolean) => void;
   openAuth: (mode: 'signin' | 'signup') => void;
   closeAuth: () => void;
@@ -133,6 +135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings | null>(null);
+  const [salesVisibilityPercent, setSalesVisibilityPercent] = useState(100);
 
   const addToast = useCallback((message: string, type: Toast['type'] = 'success') => {
     const id = Math.random().toString(36).slice(2);
@@ -345,7 +348,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [user, refreshPlatformSettings]);
 
-  // Auth init + onAuthStateChange
+  const refreshSalesVisibility = useCallback(async () => {
+    if (!activeProfileId && !user) return;
+    const creatorId = activeProfileId || user?.id;
+    if (!creatorId) return;
+    const { data, error } = await supabase.rpc('get_creator_sales_visibility', { p_profile_id: creatorId });
+    if (error || !data || data.length === 0) return;
+    const row = data[0] as { visible_ratio: number; sales_hidden: boolean };
+    if (row.sales_hidden) setSalesVisibilityPercent(0);
+    else setSalesVisibilityPercent(row.visible_ratio);
+  }, [user, activeProfileId]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -389,6 +402,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       refreshBankDetails();
       refreshPayouts();
       refreshPlatformSettings();
+      refreshSalesVisibility();
     } else {
       setProfile(null);
       setProfiles([]);
@@ -400,8 +414,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPayouts([]);
       setPlatformSettings(null);
       setActiveProfileId(null);
+      setSalesVisibilityPercent(100);
     }
-  }, [user, activeProfileId, refreshProfile, refreshProfiles, refreshMyContent, refreshPurchases, refreshSubscriptions, refreshEarnings, refreshBalances, refreshBankDetails, refreshPayouts, refreshPlatformSettings]);
+  }, [user, activeProfileId, refreshProfile, refreshProfiles, refreshMyContent, refreshPurchases, refreshSubscriptions, refreshEarnings, refreshBalances, refreshBankDetails, refreshPayouts, refreshPlatformSettings, refreshSalesVisibility]);
 
   // Load feed on mount
   useEffect(() => {
@@ -847,6 +862,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     bankDetails,
     payouts,
     platformSettings,
+    salesVisibilityPercent,
+    refreshSalesVisibility,
     setAgeVerified: setIsAgeVerified,
     openAuth,
     closeAuth,
