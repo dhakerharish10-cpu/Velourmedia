@@ -5,6 +5,7 @@ const SUPABASE_FUNCTIONS_URL = 'https://dsxsudwjrmwhnpukccly.supabase.co/functio
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/',
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
