@@ -9,7 +9,7 @@ export function EditPostModal() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [blurLevel, setBlurLevel] = useState<'low' | 'medium' | 'hard'>('medium');
+  const [blurPercent, setBlurPercent] = useState(60);
   const [mediaItems, setMediaItems] = useState<ContentMedia[]>([]);
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [newFilePreviews, setNewFilePreviews] = useState<string[]>([]);
@@ -47,7 +47,7 @@ export function EditPostModal() {
       setTitle(data.title || '');
       setDescription(data.description || '');
       setPrice(data.price?.toString() || '');
-      setBlurLevel(data.blur_level || 'medium');
+      setBlurPercent(data.blur_percent ?? (data.blur_level === 'low' ? 20 : data.blur_level === 'hard' ? 90 : 60));
       if (data.media_count > 1) {
         const media = await fetchMedia(editPostId);
         if (active) setMediaItems(media);
@@ -108,7 +108,8 @@ export function EditPostModal() {
       title: title.trim(),
       description: description.trim() || null,
       price: priceNum,
-      blur_level: blurLevel,
+      blur_level: blurPercent <= 33 ? 'low' : blurPercent >= 80 ? 'hard' : 'medium',
+      blur_percent: blurPercent,
     });
     if (updateError) {
       setError(updateError);
@@ -264,34 +265,30 @@ export function EditPostModal() {
               </div>
             </div>
 
-            {/* Blur Intensity */}
+            {/* Blur Intensity Slider */}
             <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Preview Blur Intensity</label>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { value: 'low', label: 'Normal', desc: 'Low blur', blur: 'blur-sm' },
-                  { value: 'medium', label: 'Medium', desc: 'Standard', blur: 'blur-xl' },
-                  { value: 'hard', label: 'Hard', desc: 'Heavy blur', blur: 'blur-3xl' },
-                ] as const).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setBlurLevel(opt.value)}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
-                      blurLevel === opt.value
-                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
-                        : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600'
-                    }`}
-                  >
-                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center">
-                      <ImageIcon size={16} className={`text-slate-400 dark:text-zinc-500 ${opt.blur}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${blurLevel === opt.value ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-600 dark:text-zinc-300'}`}>{opt.label}</span>
-                    <span className="text-[10px] text-slate-400 dark:text-zinc-500">{opt.desc}</span>
-                  </button>
-                ))}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-slate-500 dark:text-zinc-400">Preview Blur (0-100%)</label>
+                <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 tabular-nums">{blurPercent}%</span>
               </div>
-              <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1.5">Controls how blurred the preview appears to non-purchasers.</p>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-zinc-700">
+                  <ImageIcon size={16} className="text-slate-400 dark:text-zinc-500" style={{ filter: `blur(${(blurPercent / 100) * 24}px)` }} />
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={blurPercent}
+                  onChange={(e) => setBlurPercent(Number(e.target.value))}
+                  className="flex-1 accent-indigo-500 cursor-pointer"
+                />
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500">Clear</span>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500">Max blur</span>
+              </div>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1.5">Controls how blurred the preview appears to non-purchasers. 0% = fully visible, 100% = heavily blurred.</p>
             </div>
 
             {error && (

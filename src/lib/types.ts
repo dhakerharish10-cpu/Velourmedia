@@ -32,6 +32,7 @@ export interface Content {
   is_published: boolean;
   is_private: boolean;
   blur_level: 'low' | 'medium' | 'hard';
+  blur_percent: number;
   views_count: number;
   sales_count: number;
   earned_amount: number;

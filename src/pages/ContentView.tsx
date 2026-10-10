@@ -177,8 +177,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
 
-  const blurClass = content?.blur_level === 'low' ? 'blur-md' : content?.blur_level === 'hard' ? 'blur-3xl' : 'blur-2xl';
-  const thumbBlurClass = content?.blur_level === 'low' ? 'blur-sm' : content?.blur_level === 'hard' ? 'blur-2xl' : 'blur-xl';
+  const blurPx = ((content?.blur_percent ?? 60) / 100) * 24;
+  const blurStyle = { filter: `blur(${blurPx}px)` };
+  const thumbBlurPx = (blurPx * 0.4);
+  const thumbBlurStyle = { filter: `blur(${thumbBlurPx}px)` };
 
   return (
     <div className="min-h-screen bg-[#0B0B0F]">
@@ -400,7 +402,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                         <img
                           src={m.url}
                           alt=""
-                          className={`w-full h-full object-cover ${blurClass} scale-110 brightness-105 saturate-120`}
+                          className="w-full h-full object-cover scale-110 brightness-105 saturate-120"
+                          style={blurStyle}
                           draggable={false}
                         />
                       ) : (
@@ -473,7 +476,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                             aria-label={`Go to image ${i + 1}`}
                           >
                             {m.type === 'image' ? (
-                              <img src={m.url} alt="" className={`w-full h-full object-cover ${thumbBlurClass}`} />
+                              <img src={m.url} alt="" className="w-full h-full object-cover" style={thumbBlurStyle} />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center bg-zinc-700">
                                 <Video size={10} className="text-white/50" />

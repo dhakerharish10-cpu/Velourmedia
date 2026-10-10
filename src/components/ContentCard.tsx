@@ -25,8 +25,9 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
           alt={content.title}
           loading="lazy"
           className={`w-full h-full object-cover transition-transform duration-300 ${
-            isLocked ? `${content.blur_level === 'low' ? 'blur-md' : content.blur_level === 'hard' ? 'blur-3xl' : 'blur-xl'} scale-110 brightness-50` : 'group-hover:scale-105'
+            isLocked ? 'scale-110 brightness-50' : 'group-hover:scale-105'
           }`}
+          style={isLocked ? { filter: `blur(${((content.blur_percent ?? 60) / 100) * 24}px) brightness(0.5)` } : undefined}
         />
         {content.media_type === 'video' && !content.thumbnail_url && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-200 dark:bg-zinc-800">

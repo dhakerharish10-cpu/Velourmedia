@@ -73,7 +73,7 @@ interface StoreContextValue {
   togglePrivate: (contentId: string, isPrivate: boolean) => Promise<{ error: string | null }>;
   togglePublished: (contentId: string, isPublished: boolean) => Promise<{ error: string | null }>;
   duplicateContent: (contentId: string) => Promise<{ error: string | null }>;
-  updateContent: (contentId: string, updates: { title?: string; description?: string | null; price?: number; blur_level?: 'low' | 'medium' | 'hard' }) => Promise<{ error: string | null }>;
+  updateContent: (contentId: string, updates: { title?: string; description?: string | null; price?: number; blur_level?: 'low' | 'medium' | 'hard'; blur_percent?: number }) => Promise<{ error: string | null }>;
   addMediaToContent: (contentId: string, files: File[]) => Promise<{ error: string | null }>;
   removeMediaFromContent: (contentId: string, mediaId: string) => Promise<{ error: string | null }>;
   editPostId: string | null;
@@ -767,7 +767,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const openEditPost = useCallback((contentId: string) => setEditPostId(contentId), []);
   const closeEditPost = useCallback(() => setEditPostId(null), []);
 
-  const updateContent = useCallback(async (contentId: string, updates: { title?: string; description?: string | null; price?: number; blur_level?: 'low' | 'medium' | 'hard' }) => {
+  const updateContent = useCallback(async (contentId: string, updates: { title?: string; description?: string | null; price?: number; blur_level?: 'low' | 'medium' | 'hard'; blur_percent?: number }) => {
     const { error } = await supabase.from('content').update(updates).eq('id', contentId);
     if (error) return { error: error.message };
     await refreshMyContent();
