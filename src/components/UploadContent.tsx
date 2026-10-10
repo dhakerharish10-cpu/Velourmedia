@@ -15,7 +15,7 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
 export function UploadContent({ onDone }: { onDone?: () => void }) {
-  const { user, activeProfileId, addToast, refreshMyContent, refreshFeed } = useStore();
+  const { user, activeProfileId, profiles, addToast, refreshMyContent, refreshFeed } = useStore();
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -108,7 +108,13 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
     setUploading(true);
 
     try {
-      const creatorId = activeProfileId || user.id;
+      const profileId = activeProfileId || profiles.find((p) => p.is_primary)?.id || profiles[0]?.id;
+      if (!profileId) {
+        addToast('No creator profile found. Please complete your profile setup first.', 'error');
+        setUploading(false);
+        return;
+      }
+      const creatorId = profileId;
       const uploadedUrls: { url: string; type: 'image' | 'video' }[] = [];
 
       for (const media of mediaFiles) {

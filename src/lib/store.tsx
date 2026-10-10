@@ -172,7 +172,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     setProfiles(data || []);
-  }, [user]);
+    if (data && data.length > 0 && !activeProfileId) {
+      setActiveProfileId(data[0].id);
+    }
+  }, [user, activeProfileId]);
 
   const refreshMyContent = useCallback(async () => {
     if (!user) {
