@@ -31,11 +31,11 @@ const CREATOR_SUB_ITEMS = [
 ];
 
 export function Sidebar({ current, onNavigate, onClose }: SidebarProps) {
-  const { user, profile, profiles, setActiveProfile, openPersonaSwitcher, signOut, addToast, openUpload } = useStore();
+  const { user, profile, profiles, setActiveProfile, openPersonaSwitcher, signOut, addToast, openUpload, isAdminEmail } = useStore();
   const [creatorsOpen, setCreatorsOpen] = useState(true);
   const [expandedCreator, setExpandedCreator] = useState<string | null>(profile?.id || null);
 
-  const isAdmin = !!profile?.is_admin;
+  const isAdmin = !!profile?.is_admin || isAdminEmail;
 
   const handleNav = (path: string) => {
     onNavigate(path);
@@ -122,7 +122,7 @@ export function Sidebar({ current, onNavigate, onClose }: SidebarProps) {
         })}
 
         {/* Admin Dashboard link (admin only) */}
-        {isAdmin && (
+        {(isAdmin || isAdminEmail) && (
           <button
             onClick={() => handleNav('admin')}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all mt-2"

@@ -25,7 +25,7 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ onNavigate }: AdminPanelProps) {
-  const { user, profile, platformSettings, updatePlatformFee, addToast } = useStore();
+  const { user, profile, platformSettings, updatePlatformFee, addToast, isAdminEmail } = useStore();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [allContent, setAllContent] = useState<Content[]>([]);
@@ -62,8 +62,10 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     setStats(st.data as unknown as AdminStats);
   }, []);
 
+  const hasAdminAccess = !!profile?.is_admin || isAdminEmail;
+
   useEffect(() => {
-    if (!profile?.is_admin) return;
+    if (!hasAdminAccess) return;
     let active = true;
     (async () => {
       setLoading(true);
@@ -72,7 +74,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
       setLoading(false);
     })();
     return () => { active = false; };
-  }, [profile?.is_admin, loadData]);
+  }, [hasAdminAccess, loadData]);
 
   const reloadStats = async () => {
     const { data } = await supabase.rpc('get_admin_stats');
@@ -81,13 +83,13 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   // Redirect non-admins to dashboard with access denied message
   useEffect(() => {
-    if (user && profile && !profile.is_admin) {
+    if (user && profile && !hasAdminAccess) {
       addToast('Access denied. Admin privileges required.', 'error');
       onNavigate('dashboard');
     }
-  }, [user, profile, addToast, onNavigate]);
+  }, [user, profile, hasAdminAccess, addToast, onNavigate]);
 
-  if (!user || !profile?.is_admin) {
+  if (!user || !hasAdminAccess) {
     return (
       <div className="min-h-screen bg-white dark:bg-zinc-950">
         <Navbar onNavigate={onNavigate} />

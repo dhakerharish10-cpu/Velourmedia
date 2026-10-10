@@ -92,6 +92,13 @@ interface StoreContextValue {
   closePersonaSwitcher: () => void;
 }
 
+const ADMIN_EMAIL = 'dhakerharish10@gmail.com';
+
+export function isAdminEmailCheck(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email.toLowerCase().trim() === ADMIN_EMAIL;
+}
+
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 export function useStore() {
@@ -346,12 +353,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
+      setIsAdminEmail(isAdminEmailCheck(session?.user?.email));
       setLoading(false);
     });
 
     supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      setIsAdminEmail(isAdminEmailCheck(session?.user?.email));
       setLoading(false);
     });
 
@@ -412,17 +421,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
 
-    // Check if this is the configured admin email and auto-promote
-    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || '';
+    setIsAdminEmail(isAdminEmailCheck(email));
+
+    // Auto-promote via DB if env-configured admin secret key is available
     const adminSecretKey = import.meta.env.VITE_ADMIN_SECRET_KEY || '';
-    if (adminEmail && email.toLowerCase().trim() === adminEmail.toLowerCase().trim()) {
-      setIsAdminEmail(true);
-      if (adminSecretKey) {
-        try {
-          await supabase.rpc('promote_self_to_admin', { p_email: email, p_secret_key: adminSecretKey });
-        } catch (e) {
-          console.error('Admin auto-promotion failed:', e);
-        }
+    if (isAdminEmailCheck(email) && adminSecretKey) {
+      try {
+        await supabase.rpc('promote_self_to_admin', { p_email: email, p_secret_key: adminSecretKey });
+      } catch (e) {
+        console.error('Admin auto-promotion failed:', e);
       }
     }
 
@@ -452,6 +459,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setEarnings(null);
     setActiveProfileId(null);
     setIsAgeVerified(false);
+    setIsAdminEmail(false);
   }, []);
 
   const purchaseContent = useCallback(async (contentId: string, amount: number) => {

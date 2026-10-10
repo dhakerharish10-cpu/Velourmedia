@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useStore } from '../lib/store';
+import { useStore, isAdminEmailCheck } from '../lib/store';
 import {
   X, Mail, Lock, User, Loader2, Eye, EyeOff, ChevronDown, Phone, Gift, ArrowRight,
 } from 'lucide-react';
@@ -9,7 +9,7 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ onNavigate }: AuthModalProps = {}) {
-  const { isAuthModalOpen, authMode, closeAuth, setAuthMode, signIn, signUp, addToast, isAdminEmail } = useStore();
+  const { isAuthModalOpen, authMode, closeAuth, setAuthMode, signIn, signUp, addToast } = useStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -58,7 +58,7 @@ export function AuthModal({ onNavigate }: AuthModalProps = {}) {
     setReferralCode('');
     setShowMobile(false);
     setShowReferral(false);
-    if (onNavigate) onNavigate(isAdminEmail ? 'admin' : 'dashboard');
+    if (onNavigate) onNavigate(isAdminEmailCheck(email) ? 'admin' : 'dashboard');
   };
 
   const switchMode = () => {

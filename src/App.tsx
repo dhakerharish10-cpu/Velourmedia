@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StoreProvider, useStore } from './lib/store';
+import { StoreProvider, useStore, isAdminEmailCheck } from './lib/store';
 import { useHashRoute, parseRoute } from './lib/router';
 import { ToastContainer } from './components/Toast';
 import { AuthModal } from './components/AuthModal';
@@ -31,6 +31,7 @@ import { Loader2, Menu } from 'lucide-react';
 function Router() {
   const { route, navigate } = useHashRoute();
   const { loading, isRedirecting, user } = useStore();
+  const isAdmin = user ? isAdminEmailCheck(user.email) : false;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (isRedirecting) {
@@ -63,7 +64,7 @@ function Router() {
   // Landing page (no sidebar)
   if (segments.length === 0) {
     if (user) {
-      navigate('dashboard');
+      navigate(isAdmin ? 'admin' : 'dashboard');
       return null;
     }
     return (
