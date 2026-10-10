@@ -25,6 +25,7 @@ import { AccessPage } from './pages/AccessPage';
 import { SupportPage } from './pages/SupportPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
+import { LegalCenter } from './pages/LegalCenter';
 import { Loader2, Menu } from 'lucide-react';
 
 function Router() {
@@ -105,6 +106,16 @@ function Router() {
     return (
       <>
         <TermsPage onNavigate={navigate} />
+        <ToastContainer />
+      </>
+    );
+  }
+
+  // Legal Center (no sidebar)
+  if (first === 'legal') {
+    return (
+      <>
+        <LegalCenter onNavigate={navigate} />
         <ToastContainer />
       </>
     );

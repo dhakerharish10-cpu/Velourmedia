@@ -258,11 +258,12 @@ export function AuthModal({ onNavigate }: AuthModalProps = {}) {
 
         {/* Footer */}
         {isSignUp && (
-          <p className="text-center text-xs text-slate-400 dark:text-zinc-500 mt-4">
-            By creating an account, you agree to our{' '}
-            <button type="button" onClick={() => { closeAuth(); window.location.hash = 'terms'; }} className="text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-300 cursor-pointer">Terms of Service</button>
-            {' '}and{' '}
-            <button type="button" onClick={() => { closeAuth(); window.location.hash = 'privacy'; }} className="text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-300 cursor-pointer">Privacy Policy</button>
+          <p className="text-center text-xs text-slate-400 dark:text-zinc-500 mt-4 leading-relaxed">
+            By signing up, you agree to our{' '}
+            <button type="button" onClick={() => { closeAuth(); window.location.hash = 'legal'; }} className="text-slate-500 dark:text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 cursor-pointer underline underline-offset-2">Terms of Service</button>,{' '}
+            <button type="button" onClick={() => { closeAuth(); window.location.hash = 'legal'; }} className="text-slate-500 dark:text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 cursor-pointer underline underline-offset-2">Creator Terms</button>,{' '}
+            <button type="button" onClick={() => { closeAuth(); window.location.hash = 'legal'; }} className="text-slate-500 dark:text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 cursor-pointer underline underline-offset-2">Privacy Policy</button>
+            , and confirm you are at least 18 years old.
           </p>
         )}
 

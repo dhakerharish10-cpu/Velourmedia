@@ -626,23 +626,39 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               )}
             </div>
 
-            {/* 4. Footer Legal & Support Links */}
-            <div className="flex items-center justify-center gap-4 pt-2 pb-8">
-              <button
-                onClick={() => onNavigate('terms')}
-                className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-              >
-                <FileText size={12} />
-                Customer Terms
-              </button>
-              <span className="text-zinc-700">·</span>
-              <button
-                onClick={() => onNavigate('support')}
-                className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-              >
-                <Flag size={12} />
-                Need help? Report abuse
-              </button>
+            {/* 4. Compliance & Footer Legal Links */}
+            <div className="text-center pt-2 pb-8 space-y-3">
+              <p className="text-xs text-zinc-500">
+                By purchasing, you agree to our{' '}
+                <button onClick={() => onNavigate('legal')} className="text-zinc-400 hover:text-indigo-400 transition-colors underline underline-offset-2">Customer Terms</button>
+                {' '}and{' '}
+                <button onClick={() => onNavigate('legal')} className="text-zinc-400 hover:text-indigo-400 transition-colors underline underline-offset-2">Privacy Policy</button>.
+              </p>
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => onNavigate('legal')}
+                  className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-indigo-400 transition-colors"
+                >
+                  <FileText size={12} />
+                  Customer Terms
+                </button>
+                <span className="text-zinc-700">·</span>
+                <button
+                  onClick={() => onNavigate('legal')}
+                  className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-indigo-400 transition-colors"
+                >
+                  <ShieldCheck size={12} />
+                  Privacy Policy
+                </button>
+                <span className="text-zinc-700">·</span>
+                <button
+                  onClick={() => onNavigate('support')}
+                  className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-indigo-400 transition-colors"
+                >
+                  <Flag size={12} />
+                  Need help? Report abuse
+                </button>
+              </div>
             </div>
           </div>
         )}
