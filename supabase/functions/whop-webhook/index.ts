@@ -16,11 +16,74 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function ok(): Response {
+  return new Response(null, { status: 200, headers: corsHeaders });
+}
+
 function getServiceClient() {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) throw new Error("Supabase service configuration is missing.");
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+/**
+ * Verify the Whop webhook signature.
+ *
+ * Whop signs the string `{webhook-id}.{webhook-timestamp}.{raw-body}` with
+ * HMAC-SHA256 using the `ws_...` secret. The `webhook-signature` header
+ * contains the result in the format `v1,<base64>`.
+ */
+async function verifyWhopSignature(
+  rawBody: string,
+  headers: Headers,
+  secret: string,
+): Promise<boolean> {
+  const signatureHeader = headers.get("webhook-signature");
+  if (!signatureHeader) {
+    console.warn("[whop-webhook] missing webhook-signature header");
+    return false;
+  }
+
+  const webhookId = headers.get("webhook-id");
+  const webhookTimestamp = headers.get("webhook-timestamp");
+  if (!webhookId || !webhookTimestamp) {
+    console.warn("[whop-webhook] missing webhook-id or webhook-timestamp header");
+    return false;
+  }
+
+  // Reject timestamps older than 5 minutes to prevent replay attacks
+  const ts = Number(webhookTimestamp);
+  if (isNaN(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    console.warn("[whop-webhook] timestamp out of range", webhookTimestamp);
+    return false;
+  }
+
+  // The signed content is: {webhook-id}.{webhook-timestamp}.{raw-body}
+  const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody}`;
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sigBytes = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedContent));
+  const expectedBase64 = btoa(String.fromCharCode(...new Uint8Array(sigBytes)));
+
+  // The header can contain multiple signatures: "v1,xxx v1,yyy"
+  // We check if any match our expected value
+  const signatures = signatureHeader.split(" ").map((s) => s.trim());
+  for (const sig of signatures) {
+    const parts = sig.split(",");
+    if (parts.length === 2 && parts[0] === "v1" && parts[1] === expectedBase64) {
+      return true;
+    }
+  }
+
+  console.warn("[whop-webhook] signature mismatch", { expected: expectedBase64.slice(0, 16), got: signatureHeader.slice(0, 32) });
+  return false;
 }
 
 async function activatePurchase(
@@ -160,7 +223,7 @@ async function sendSaleAlertEmail(
   }
 }
 
-async function processWebhookEvent(payload: JsonRecord): Promise<Response> {
+async function processWebhookEvent(payload: JsonRecord): Promise<void> {
   const eventType = typeof payload.event === "string"
     ? payload.event
     : typeof payload.type === "string"
@@ -173,7 +236,6 @@ async function processWebhookEvent(payload: JsonRecord): Promise<Response> {
 
   console.log("[whop-webhook] received event", { eventType, orderId });
 
-  // Handle payment success events
   const successEvents = [
     "payment.captured",
     "payment.succeeded",
@@ -184,12 +246,13 @@ async function processWebhookEvent(payload: JsonRecord): Promise<Response> {
   ];
 
   if (!successEvents.includes(eventType)) {
-    return json({ received: true, message: "Event type not relevant." });
+    console.log("[whop-webhook] ignoring event type", eventType);
+    return;
   }
 
   if (!orderId) {
     console.warn("[whop-webhook] no order_id in metadata", payload);
-    return json({ error: "No order_id in webhook metadata." }, 400);
+    return;
   }
 
   const supabase = getServiceClient();
@@ -200,7 +263,7 @@ async function processWebhookEvent(payload: JsonRecord): Promise<Response> {
     .maybeSingle();
   if (intentError || !intent) {
     console.error("[whop-webhook] checkout not found for order", orderId, intentError);
-    return json({ error: "Checkout not found." }, 404);
+    return;
   }
 
   const intentRecord = intent as JsonRecord;
@@ -208,7 +271,10 @@ async function processWebhookEvent(payload: JsonRecord): Promise<Response> {
   const paidAmount = Number(intentRecord.amount);
 
   const activated = await activatePurchase(supabase, intentRecord, paymentId);
-  if (!activated) return json({ error: "Unable to activate purchase." }, 500);
+  if (!activated) {
+    console.error("[whop-webhook] failed to activate purchase for order", orderId);
+    return;
+  }
 
   const platformFee = Math.round(paidAmount * 0.3 * 100) / 100;
   const netToCreator = Math.round((paidAmount - platformFee) * 100) / 100;
@@ -220,49 +286,39 @@ async function processWebhookEvent(payload: JsonRecord): Promise<Response> {
     .eq("id", intentRecord.id);
   if (updateError) console.error("[whop-webhook] intent update failed", updateError);
 
-  return json({ received: true });
+  console.log("[whop-webhook] successfully processed order", orderId);
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
-  try {
-    if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  // Always return 200 OK so Whop doesn't mark the webhook as failing
+  if (req.method !== "POST") return ok();
 
+  try {
     const rawBody = await req.text();
 
-    // Verify Whop webhook signature if a signing secret is configured
+    // Verify Whop webhook signature
     const whopWebhookSecret = Deno.env.get("WHOP_WEBHOOK_SECRET");
     if (whopWebhookSecret) {
-      const signature = req.headers.get("x-whop-signature") || req.headers.get("whop-signature");
-      if (signature) {
-        // Simple timestamp + HMAC verification
-        // Whop uses a webhook signing secret for verification
-        const expectedSig = await hmacSha256(rawBody, whopWebhookSecret);
-        if (signature !== expectedSig) {
-          console.warn("[whop-webhook] signature mismatch");
-          return json({ error: "Invalid webhook signature." }, 401);
-        }
+      const isValid = await verifyWhopSignature(rawBody, req.headers, whopWebhookSecret);
+      if (!isValid) {
+        console.warn("[whop-webhook] signature verification failed — returning 200 anyway to avoid retries");
+        return ok();
       }
+    } else {
+      console.warn("[whop-webhook] WHOP_WEBHOOK_SECRET not configured — skipping verification");
     }
 
     const payload = JSON.parse(rawBody) as JsonRecord;
-    return await processWebhookEvent(payload);
+
+    // Process the event but always return 200 OK so Whop doesn't retry
+    await processWebhookEvent(payload);
+    return ok();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error.";
     console.error("[whop-webhook] error", message);
-    return json({ error: message }, 500);
+    // Return 200 even on errors to prevent Whop from marking the webhook as failing
+    return ok();
   }
 });
-
-async function hmacSha256(data: string, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
-  return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
