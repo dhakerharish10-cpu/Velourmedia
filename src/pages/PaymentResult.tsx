@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Check, Clock3, Loader2, ArrowRight, AlertCircle, Mail } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { getWhopStatus } from '../lib/whop';
@@ -10,10 +10,11 @@ interface PaymentResultProps {
 
 export function PaymentResult({ onNavigate }: PaymentResultProps) {
   const { user, refreshPurchases } = useStore();
-  const [status, setStatus] = useState<'checking' | 'confirmed' | 'pending' | 'failed' | 'error'>('checking');
+  const [status, setStatus] = useState<'checking' | 'confirmed' | 'pending' | 'failed' | 'error' | 'redirecting'>('checking');
   const [contentId, setContentId] = useState<string | null>(null);
   const [accessLink, setAccessLink] = useState<string | null>(null);
   const [tokenCreated, setTokenCreated] = useState(false);
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -32,9 +33,18 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
         if (!active) return;
         if (result.content_id) setContentId(result.content_id);
         if (result.status === 'confirmed' || result.status === 'finished') {
-          setStatus('confirmed');
+          if (result.content_id) setContentId(result.content_id);
           if (user) {
             await refreshPurchases();
+            if (active && result.content_id && !redirectedRef.current) {
+              redirectedRef.current = true;
+              setStatus('redirecting');
+              window.setTimeout(() => {
+                if (active) onNavigate(`u/${result.content_id}`);
+              }, 1500);
+            } else if (active) {
+              setStatus('confirmed');
+            }
           } else if (result.content_id && !tokenCreated) {
             // Guest checkout: create a 7-day access token and link
             const guestEmail = sessionStorage.getItem('guest_email');
@@ -71,7 +81,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
     return () => {
       active = false;
     };
-  }, [user, refreshPurchases, tokenCreated]);
+  }, [user, refreshPurchases, tokenCreated, onNavigate]);
 
   const content = {
     checking: {
@@ -90,6 +100,11 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
       body: user
         ? 'Your premium access is now active. You can start enjoying the content immediately.'
         : 'Your payment is confirmed. A 7-day access link has been sent to your email.',
+    },
+    redirecting: {
+      icon: <Loader2 size={28} className="animate-spin text-emerald-600" />,
+      title: 'Unlocking your content',
+      body: 'Payment confirmed! Taking you to your unlocked post now...',
     },
     failed: {
       icon: <AlertCircle size={28} className="text-red-500" />,
@@ -130,6 +145,15 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
               </a>
             )}
           </>
+        )}
+        {status === 'redirecting' && contentId && (
+          <button
+            onClick={() => onNavigate(`u/${contentId}`)}
+            className="mt-7 w-full rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2"
+          >
+            Go to content now
+            <ArrowRight size={16} />
+          </button>
         )}
         {(status === 'failed' || status === 'error') && (
           <button

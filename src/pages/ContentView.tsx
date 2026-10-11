@@ -24,7 +24,7 @@ interface ContentViewProps {
 }
 
 export function ContentView({ contentId, onNavigate }: ContentViewProps) {
-  const { user, isUnlocked, handlePayment, handleTipPayment, openAuth } = useStore();
+  const { user, isUnlocked, handlePayment, handleTipPayment, openAuth, refreshPurchases } = useStore();
   const [content, setContent] = useState<Content | null>(null);
   const [mediaItems, setMediaItems] = useState<ContentMedia[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +112,16 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       setJustPurchased(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      refreshPurchases().then(() => {
+        if (window.location.hash.includes('payment=success') || sessionStorage.getItem('guest_email')) {
+          setJustPurchased(true);
+        }
+      });
+    }
+  }, [user, refreshPurchases]);
 
   const allMedia = mediaItems.length > 0
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
