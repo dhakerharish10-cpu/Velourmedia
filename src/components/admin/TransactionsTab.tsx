@@ -58,9 +58,9 @@ export function TransactionsTab({ purchases }: TransactionsTabProps) {
                       <span className="ml-1 text-slate-400 dark:text-zinc-500">({p.payment_provider})</span>
                     )}
                   </td>
-                  <td className="py-3 px-3 text-right font-semibold text-slate-900 dark:text-white">{formatCurrency(p.amount_paid)}</td>
-                  <td className="py-3 px-3 text-right text-emerald-600 dark:text-emerald-400">{formatCurrency(p.net_to_creator)}</td>
-                  <td className="py-3 px-3 text-right text-indigo-600 dark:text-indigo-400">{formatCurrency(p.platform_fee)}</td>
+                  <td className="py-3 px-3 text-right font-semibold text-slate-900 dark:text-white">{formatCurrency(p.amount)}</td>
+                  <td className="py-3 px-3 text-right text-emerald-600 dark:text-emerald-400">{formatCurrency(p.creator_earnings)}</td>
+                  <td className="py-3 px-3 text-right text-indigo-600 dark:text-indigo-400">{formatCurrency(p.platform_earnings)}</td>
                 </tr>
               ))}
             </tbody>
@@ -68,13 +68,13 @@ export function TransactionsTab({ purchases }: TransactionsTabProps) {
               <tr className="border-t-2 border-slate-200 dark:border-zinc-700">
                 <td colSpan={4} className="py-3 px-3 text-right text-sm font-medium text-slate-500 dark:text-zinc-400">Totals:</td>
                 <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-white">
-                  {formatCurrency(purchases.reduce((s, p) => s + Number(p.amount_paid), 0))}
+                  {formatCurrency(purchases.reduce((s, p) => s + Number(p.amount), 0))}
                 </td>
                 <td className="py-3 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(purchases.reduce((s, p) => s + Number(p.net_to_creator), 0))}
+                  {formatCurrency(purchases.reduce((s, p) => s + Number(p.creator_earnings), 0))}
                 </td>
                 <td className="py-3 px-3 text-right font-bold text-indigo-600 dark:text-indigo-400">
-                  {formatCurrency(purchases.reduce((s, p) => s + Number(p.platform_fee), 0))}
+                  {formatCurrency(purchases.reduce((s, p) => s + Number(p.platform_earnings), 0))}
                 </td>
               </tr>
             </tfoot>
