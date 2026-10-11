@@ -123,3 +123,18 @@ export async function confirmPaymentFallback(orderId: string): Promise<PaymentSt
     content_id: typeof result.content_id === 'string' ? result.content_id : null,
   };
 }
+
+export interface SyncResult {
+  synced: number;
+  skipped: number;
+  pages: number;
+}
+
+export async function syncWhopPayments(): Promise<SyncResult> {
+  const result = await callWhop('sync-whop-payments', {});
+  return {
+    synced: typeof result.synced === 'number' ? result.synced : 0,
+    skipped: typeof result.skipped === 'number' ? result.skipped : 0,
+    pages: typeof result.pages === 'number' ? result.pages : 0,
+  };
+}

@@ -389,6 +389,97 @@ async function confirmPayment(req: Request, orderId: string): Promise<Response> 
   return json({ order_id: orderId, status: "confirmed", content_id: intentRecord.content_id, creator_id: intentRecord.creator_id });
 }
 
+async function requireAdmin(req: Request): Promise<boolean> {
+  const user = await requireUser(req);
+  if (!user) return false;
+  const supabase = getServiceClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  return !!profile?.is_admin;
+}
+
+async function syncWhopPayments(req: Request): Promise<Response> {
+  const isAdmin = await requireAdmin(req);
+  if (!isAdmin) return json({ error: "Admin access required." }, 403);
+
+  const apiKey = Deno.env.get("WHOP_API_KEY");
+  if (!apiKey) return json({ error: "WHOP_API_KEY is not configured." }, 500);
+
+  const supabase = getServiceClient();
+  let synced = 0;
+  let skipped = 0;
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore && page <= 20) {
+    const url = `${WHOP_API_BASE}/payments?status=succeeded&per_page=100&page=${page}`;
+    console.log("[whop] sync fetching page", page);
+
+    const response = await fetch(url, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("[whop] sync API error", response.status, text.slice(0, 500));
+      break;
+    }
+
+    const result = await response.json().catch(() => ({})) as JsonRecord;
+    const payments = Array.isArray(result.data) ? result.data as JsonRecord[] : [];
+
+    for (const payment of payments) {
+      const metadata = (payment.metadata ?? {}) as JsonRecord;
+      const orderId = typeof metadata.order_id === "string" ? metadata.order_id : "";
+      if (!orderId) {
+        skipped++;
+        continue;
+      }
+
+      const { data: intent } = await supabase
+        .from("nowpayments_checkout_intents")
+        .select("*")
+        .eq("order_id", orderId)
+        .maybeSingle();
+
+      if (!intent) {
+        skipped++;
+        continue;
+      }
+
+      const intentRecord = intent as JsonRecord;
+      if (intentRecord.status === "confirmed") {
+        skipped++;
+        continue;
+      }
+
+      const paymentId = typeof payment.id === "string" ? payment.id : `sync_${orderId}`;
+      const buyerEmail = typeof (payment.customer as JsonRecord | undefined)?.email === "string"
+        ? (payment.customer as JsonRecord).email as string
+        : null;
+
+      const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail);
+      if (activated) {
+        await supabase
+          .from("nowpayments_checkout_intents")
+          .update({ status: "confirmed", payment_id: paymentId, updated_at: new Date().toISOString() })
+          .eq("id", intentRecord.id);
+        synced++;
+      } else {
+        skipped++;
+      }
+    }
+
+    hasMore = typeof result.has_more === "boolean" ? result.has_more : payments.length === 100;
+    page++;
+  }
+
+  console.log("[whop] sync complete", { synced, skipped, pages: page - 1 });
+  return json({ synced, skipped, pages: page - 1 });
+}
+
 async function getCheckoutStatus(req: Request, orderId: string): Promise<Response> {
   if (!orderId) return json({ error: "Order ID is required." }, 400);
   const supabase = getServiceClient();
@@ -421,6 +512,7 @@ Deno.serve(async (req: Request) => {
     if (action === "create-checkout") return await createCheckout(req, body);
     if (action === "status") return await getCheckoutStatus(req, typeof body.order_id === "string" ? body.order_id : "");
     if (action === "confirm-payment") return await confirmPayment(req, typeof body.order_id === "string" ? body.order_id : "");
+    if (action === "sync-whop-payments") return await syncWhopPayments(req);
     return json({ error: "Unknown route." }, 404);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error.";

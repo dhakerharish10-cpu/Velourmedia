@@ -7,8 +7,9 @@ import type { Profile, Content, Purchase, Payout, BankDetails, ContentReport } f
 import {
   Shield, Users, DollarSign, ArrowLeft, Percent, Save, TrendingUp, Wallet,
   CheckCircle, XCircle, Clock, Ban, Power, Eye, EyeOff, Trash2, FileCheck,
-  Banknote, Bitcoin, Flag, Receipt, SlidersHorizontal,
+  Banknote, Bitcoin, Flag, Receipt, SlidersHorizontal, RefreshCw,
 } from 'lucide-react';
+import { syncWhopPayments } from '../lib/whop';
 import { DmcaTab } from '../components/admin/DmcaTab';
 import { TransactionsTab } from '../components/admin/TransactionsTab';
 import { SecurityTab } from '../components/admin/SecurityTab';
@@ -42,6 +43,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [feeInput, setFeeInput] = useState(String(platformSettings?.platform_fee_percent ?? 30));
   const [savingFee, setSavingFee] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     setFeeInput(String(platformSettings?.platform_fee_percent ?? 30));
@@ -82,6 +84,20 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     })();
     return () => { active = false; };
   }, [hasAdminAccess, loadData]);
+
+  const handleSyncWhop = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncWhopPayments();
+      addToast(`Synced ${result.synced} payment(s) from Whop (${result.skipped} already up to date).`, 'success');
+      await loadData();
+      await reloadStats();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to sync Whop payments.', 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const reloadStats = async () => {
     const { data } = await supabase.rpc('get_admin_stats');
@@ -261,6 +277,22 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
             {/* ============ OVERVIEW ============ */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
+                {/* Sync bar */}
+                <div className="flex items-center justify-between rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Whop Payment Sync</h3>
+                    <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">Fetch all succeeded payments from Whop and sync them to the database.</p>
+                  </div>
+                  <button
+                    onClick={handleSyncWhop}
+                    disabled={syncing}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
+                    {syncing ? 'Syncing...' : 'Sync Now'}
+                  </button>
+                </div>
+
                 {/* Stats grid */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <StatCard icon={DollarSign} label="Gross Volume" value={`$${Number(stats?.total_gross_volume || 0).toFixed(2)}`} />
