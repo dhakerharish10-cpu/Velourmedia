@@ -94,25 +94,27 @@ async function activatePurchase(
   const platformFee = Math.round(Number(intent.amount) * 0.3 * 100) / 100;
   const netToCreator = Math.round((Number(intent.amount) - platformFee) * 100) / 100;
 
-  if (intent.buyer_id) {
-    if (intent.checkout_type === "content") {
-      const { error: purchaseError } = await supabase.from("purchases").upsert({
-        buyer_id: intent.buyer_id,
-        content_id: intent.content_id,
-        amount_paid: intent.amount,
-        payment_id: paymentId,
-        payment_provider: "whop",
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-        buyer_email: buyerEmail,
-      }, { onConflict: "buyer_id,content_id", ignoreDuplicates: true });
-      if (purchaseError) {
-        console.error("[whop-webhook] purchase upsert failed", purchaseError);
-        return false;
-      }
-    } else if (intent.checkout_type === "tip") {
-      console.log("[whop-webhook] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
+  if (intent.checkout_type === "content") {
+    const buyerId = typeof intent.buyer_id === "string" ? intent.buyer_id : null;
+    const { error: purchaseError } = await supabase.from("purchases").upsert({
+      buyer_id: buyerId,
+      content_id: intent.content_id,
+      amount_paid: intent.amount,
+      payment_id: paymentId,
+      payment_provider: "whop",
+      platform_fee: platformFee,
+      net_to_creator: netToCreator,
+      buyer_email: buyerEmail,
+    }, {
+      onConflict: buyerId ? "buyer_id,content_id" : "payment_id,content_id",
+      ignoreDuplicates: true,
+    });
+    if (purchaseError) {
+      console.error("[whop-webhook] purchase upsert failed", purchaseError);
+      return false;
     }
+  } else if (intent.checkout_type === "tip") {
+    console.log("[whop-webhook] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
   }
 
   return true;

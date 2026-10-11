@@ -94,7 +94,25 @@ export async function getWhopStatus(orderId: string): Promise<PaymentStatus> {
 }
 
 export async function confirmPaymentFallback(orderId: string): Promise<PaymentStatus> {
-  const result = await callWhop('confirm-payment', { order_id: orderId });
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Payment service is not configured.');
+  const { data: { session } } = await supabase.auth.getSession();
+  const guestEmail = sessionStorage.getItem('guest_email');
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/whop-payment/confirm-payment`, {
+    method: 'POST',
+    headers: {
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      apikey: SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      ...(guestEmail ? { 'X-Buyer-Email': guestEmail } : {}),
+    },
+    body: JSON.stringify({ order_id: orderId }),
+  });
+  const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    console.error('[whop] confirm-payment failed', { status: response.status, result });
+    throw new Error(typeof result.error === 'string' ? result.error : 'Payment confirmation failed.');
+  }
   if (typeof result.order_id !== 'string' || typeof result.status !== 'string') {
     throw new Error('Payment confirmation failed.');
   }

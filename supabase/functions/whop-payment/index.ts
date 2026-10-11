@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-guest-token",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-guest-token, X-Buyer-Email",
 };
 
 const WHOP_API_BASE = "https://api.whop.com/api/v1";
@@ -151,28 +151,32 @@ async function activatePurchase(
   intent: JsonRecord,
   paymentId: string | null,
   paidAmount: number,
+  buyerEmail?: string | null,
 ): Promise<boolean> {
   const platformFee = Math.round(Number(intent.amount) * 0.3 * 100) / 100;
   const netToCreator = Math.round((Number(intent.amount) - platformFee) * 100) / 100;
 
-  if (intent.buyer_id) {
-    if (intent.checkout_type === "content") {
-      const { error: purchaseError } = await supabase.from("purchases").upsert({
-        buyer_id: intent.buyer_id,
-        content_id: intent.content_id,
-        amount_paid: intent.amount,
-        payment_id: paymentId,
-        payment_provider: "whop",
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-      }, { onConflict: "buyer_id,content_id", ignoreDuplicates: true });
-      if (purchaseError) {
-        console.error("[whop] purchase upsert failed", purchaseError);
-        return false;
-      }
-    } else if (intent.checkout_type === "tip") {
-      console.log("[whop] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
+  if (intent.checkout_type === "content") {
+    const buyerId = typeof intent.buyer_id === "string" ? intent.buyer_id : null;
+    const { error: purchaseError } = await supabase.from("purchases").upsert({
+      buyer_id: buyerId,
+      content_id: intent.content_id,
+      amount_paid: intent.amount,
+      payment_id: paymentId,
+      payment_provider: "whop",
+      platform_fee: platformFee,
+      net_to_creator: netToCreator,
+      buyer_email: buyerEmail ?? null,
+    }, {
+      onConflict: buyerId ? "buyer_id,content_id" : "payment_id,content_id",
+      ignoreDuplicates: true,
+    });
+    if (purchaseError) {
+      console.error("[whop] purchase upsert failed", purchaseError);
+      return false;
     }
+  } else if (intent.checkout_type === "tip") {
+    console.log("[whop] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
   }
 
   await sendSaleAlertEmail(supabase, intent, netToCreator);
@@ -372,7 +376,7 @@ async function confirmPayment(req: Request, orderId: string): Promise<Response> 
   const paymentId = typeof intentRecord.payment_id === "string" ? intentRecord.payment_id : `fallback_${orderId}`;
   const buyerEmail = typeof req.headers.get("X-Buyer-Email") === "string" ? req.headers.get("X-Buyer-Email") : null;
 
-  const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount));
+  const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail);
   if (!activated) return json({ error: "Failed to confirm purchase." }, 500);
 
   const { error: updateError } = await supabase
