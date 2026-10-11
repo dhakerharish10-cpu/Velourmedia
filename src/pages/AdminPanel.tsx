@@ -111,7 +111,13 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     setSyncing(true);
     try {
       const result = await syncWhopPayments();
-      addToast(`Synced ${result.synced} payment(s) from Whop (${result.skipped} already up to date).`, 'success');
+      const totalNew = result.synced + result.historical;
+      addToast(
+        totalNew > 0
+          ? `Synced ${result.synced} checkout payment(s) + ${result.historical} historical payment(s) from Whop.`
+          : `Whop sync complete — all payments already up to date.`,
+        'success',
+      );
       await loadData();
       await reloadStats();
     } catch (err) {
@@ -363,24 +369,61 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
                   )}
                 </div>
 
-                {/* Recent sales */}
+                {/* Creator Performance */}
+                <CreatorPerformanceTable purchases={allPurchases} profiles={profiles} allContent={allContent} />
+
+                {/* Recent Sales Log */}
                 <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4">Recent Sales</h3>
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {allPurchases.length === 0 ? (
-                      <p className="text-sm text-slate-400 dark:text-zinc-500 py-8 text-center">No sales yet.</p>
-                    ) : (
-                      allPurchases.slice(0, 20).map((p) => (
-                        <div key={p.id} className="flex items-center justify-between rounded-lg border border-slate-100 dark:border-zinc-800 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.content?.title || 'Unknown'}</p>
-                            <p className="text-xs text-slate-400 dark:text-zinc-500">by @{p.content?.creator?.username || 'Unknown'}</p>
-                          </div>
-                          <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">${Number(p.amount_paid).toFixed(2)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4">
+                    Recent Sales Log
+                    <span className="ml-2 text-xs font-normal text-slate-400 dark:text-zinc-500">({allPurchases.length} total)</span>
+                  </h3>
+                  {allPurchases.length === 0 ? (
+                    <p className="text-sm text-slate-400 dark:text-zinc-500 py-8 text-center">No sales yet. Click "Sync Now" to import from Whop.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 dark:border-zinc-800 text-left">
+                            <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Date</th>
+                            <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Post Title</th>
+                            <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Creator</th>
+                            <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Buyer</th>
+                            <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500 text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allPurchases.slice(0, 30).map((p) => (
+                            <tr key={p.id} className="border-b border-slate-100 dark:border-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-800/30">
+                              <td className="py-2.5 px-3 text-xs text-slate-400 dark:text-zinc-500 whitespace-nowrap">
+                                {new Date(p.created_at).toLocaleDateString()}
+                              </td>
+                              <td className="py-2.5 px-3 max-w-[160px]">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.content?.title || 'Unknown'}</p>
+                              </td>
+                              <td className="py-2.5 px-3 text-xs text-slate-500 dark:text-zinc-400">
+                                @{p.content?.creator?.username || '—'}
+                              </td>
+                              <td className="py-2.5 px-3 text-xs font-mono text-slate-500 dark:text-zinc-400 max-w-[140px] truncate">
+                                {p.buyer_email || (p.buyer_id ? p.buyer_id.slice(0, 10) + '…' : 'Guest')}
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                                ${Number(p.amount_paid).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-200 dark:border-zinc-700">
+                            <td colSpan={4} className="py-2.5 px-3 text-xs font-medium text-slate-500 dark:text-zinc-400 text-right">Total Gross Volume:</td>
+                            <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">
+                              ${allPurchases.reduce((s, p) => s + Number(p.amount_paid), 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -715,5 +758,69 @@ function KycStatusBadge({ status }: { status: string }) {
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${styles[status] || styles.not_submitted}`}>
       {labels[status] || status}
     </span>
+  );
+}
+
+function CreatorPerformanceTable({
+  purchases,
+  profiles,
+  allContent,
+}: {
+  purchases: Purchase[];
+  profiles: Profile[];
+  allContent: Content[];
+}) {
+  const rows = profiles.map((prof) => {
+    const creatorContent = allContent.filter((c) => c.creator_id === prof.id);
+    const creatorPurchases = purchases.filter((p) => p.content?.creator?.id === prof.id || creatorContent.some((c) => c.id === p.content_id));
+    const gross = creatorPurchases.reduce((s, p) => s + Number(p.amount_paid), 0);
+    const platformShare = creatorPurchases.reduce((s, p) => s + Number(p.platform_fee || 0), 0);
+    const creatorPayout = creatorPurchases.reduce((s, p) => s + Number(p.net_to_creator || 0), 0);
+    return { prof, posts: creatorContent.length, sales: creatorPurchases.length, gross, platformShare, creatorPayout };
+  }).filter((r) => r.posts > 0 || r.sales > 0).sort((a, b) => b.gross - a.gross);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
+      <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4">Creator Performance</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 dark:border-zinc-800 text-left">
+              <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Creator</th>
+              <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500 text-center">Posts</th>
+              <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500 text-center">Sales</th>
+              <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500 text-right">Gross Revenue</th>
+              <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500 text-right">Platform (30%)</th>
+              <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500 text-right">Creator Payout</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ prof, posts, sales, gross, platformShare, creatorPayout }) => (
+              <tr key={prof.id} className="border-b border-slate-100 dark:border-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-800/30">
+                <td className="py-2.5 px-3">
+                  <p className="font-medium text-slate-900 dark:text-white">@{prof.username}</p>
+                  <p className="text-xs text-slate-400 dark:text-zinc-500">{prof.display_name || '—'}</p>
+                </td>
+                <td className="py-2.5 px-3 text-center text-slate-600 dark:text-zinc-300">{posts}</td>
+                <td className="py-2.5 px-3 text-center text-slate-600 dark:text-zinc-300">{sales}</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-white">${gross.toFixed(2)}</td>
+                <td className="py-2.5 px-3 text-right text-indigo-600 dark:text-indigo-400">${platformShare.toFixed(2)}</td>
+                <td className="py-2.5 px-3 text-right text-emerald-600 dark:text-emerald-400">${creatorPayout.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-200 dark:border-zinc-700">
+              <td colSpan={3} className="py-2.5 px-3 text-right text-xs font-medium text-slate-400 dark:text-zinc-500">Totals:</td>
+              <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">${rows.reduce((s, r) => s + r.gross, 0).toFixed(2)}</td>
+              <td className="py-2.5 px-3 text-right font-bold text-indigo-600 dark:text-indigo-400">${rows.reduce((s, r) => s + r.platformShare, 0).toFixed(2)}</td>
+              <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">${rows.reduce((s, r) => s + r.creatorPayout, 0).toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
   );
 }

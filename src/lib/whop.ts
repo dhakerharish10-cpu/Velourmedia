@@ -126,6 +126,7 @@ export async function confirmPaymentFallback(orderId: string): Promise<PaymentSt
 
 export interface SyncResult {
   synced: number;
+  historical: number;
   skipped: number;
   pages: number;
 }
@@ -134,6 +135,7 @@ export async function syncWhopPayments(): Promise<SyncResult> {
   const result = await callWhop('sync-whop-payments', {});
   return {
     synced: typeof result.synced === 'number' ? result.synced : 0,
+    historical: typeof result.historical === 'number' ? result.historical : 0,
     skipped: typeof result.skipped === 'number' ? result.skipped : 0,
     pages: typeof result.pages === 'number' ? result.pages : 0,
   };

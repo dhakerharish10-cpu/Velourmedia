@@ -409,20 +409,35 @@ async function syncWhopPayments(req: Request): Promise<Response> {
   if (!isAdmin) return json({ error: "Admin access required." }, 403);
 
   const apiKey = Deno.env.get("WHOP_API_KEY");
+  const companyId = Deno.env.get("WHOP_COMPANY_ID");
   if (!apiKey) return json({ error: "WHOP_API_KEY is not configured." }, 500);
 
   const supabase = getServiceClient();
+
+  // Resolve the primary admin creator profile for historical payments with no intent
+  const { data: adminProfiles } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("is_admin", true)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const fallbackCreatorId = adminProfiles?.[0]?.id ?? null;
+
   let synced = 0;
+  let historical = 0;
   let skipped = 0;
   let page = 1;
   let hasMore = true;
 
   while (hasMore && page <= 20) {
-    const url = `${WHOP_API_BASE}/payments?status=succeeded&per_page=100&page=${page}`;
-    console.log("[whop] sync fetching page", page);
+    // Try both Whop v2 and v1 URL patterns; Whop uses `page` and `per` params
+    const params = new URLSearchParams({ per: "100", page: String(page) });
+    if (companyId) params.set("company_id", companyId);
+    const url = `${WHOP_API_BASE}/payments?${params.toString()}`;
+    console.log("[whop] sync fetching page", page, url);
 
     const response = await fetch(url, {
-      headers: { "Authorization": `Bearer ${apiKey}` },
+      headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
     });
     if (!response.ok) {
       const text = await response.text();
@@ -432,55 +447,121 @@ async function syncWhopPayments(req: Request): Promise<Response> {
 
     const result = await response.json().catch(() => ({})) as JsonRecord;
     const payments = Array.isArray(result.data) ? result.data as JsonRecord[] : [];
+    console.log("[whop] sync page", page, "got", payments.length, "payments");
 
     for (const payment of payments) {
-      const metadata = (payment.metadata ?? {}) as JsonRecord;
-      const orderId = typeof metadata.order_id === "string" ? metadata.order_id : "";
-      if (!orderId) {
+      const paymentStatus = typeof payment.status === "string" ? payment.status : "";
+      // Accept succeeded, paid, complete, and completed statuses
+      if (!["succeeded", "paid", "complete", "completed"].includes(paymentStatus)) {
         skipped++;
         continue;
       }
 
-      const { data: intent } = await supabase
-        .from("nowpayments_checkout_intents")
-        .select("*")
-        .eq("order_id", orderId)
-        .maybeSingle();
+      const paymentId = typeof payment.id === "string" ? payment.id : null;
+      if (!paymentId) { skipped++; continue; }
 
-      if (!intent) {
-        skipped++;
-        continue;
-      }
+      // Extract amount — Whop can use total_cents, subtotal_cents, or final_amount
+      const totalCents = typeof payment.total_cents === "number" ? payment.total_cents
+        : typeof payment.subtotal_cents === "number" ? payment.subtotal_cents
+        : typeof payment.final_amount === "number" ? payment.final_amount * 100
+        : 0;
+      const amount = Math.round(totalCents) / 100;
 
-      const intentRecord = intent as JsonRecord;
-      if (intentRecord.status === "confirmed") {
-        skipped++;
-        continue;
-      }
-
-      const paymentId = typeof payment.id === "string" ? payment.id : `sync_${orderId}`;
-      const buyerEmail = typeof (payment.customer as JsonRecord | undefined)?.email === "string"
-        ? (payment.customer as JsonRecord).email as string
+      const buyerEmail = typeof payment.email === "string" ? payment.email
+        : typeof (payment.user as JsonRecord | undefined)?.email === "string" ? (payment.user as JsonRecord).email as string
+        : typeof (payment.customer as JsonRecord | undefined)?.email === "string" ? (payment.customer as JsonRecord).email as string
         : null;
 
-      const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail);
-      if (activated) {
-        await supabase
+      const metadata = (payment.metadata ?? {}) as JsonRecord;
+      const orderId = typeof metadata.order_id === "string" ? metadata.order_id : null;
+
+      // --- Path 1: We have a matching checkout intent ---
+      if (orderId) {
+        const { data: intent } = await supabase
           .from("nowpayments_checkout_intents")
-          .update({ status: "confirmed", payment_id: paymentId, updated_at: new Date().toISOString() })
-          .eq("id", intentRecord.id);
-        synced++;
-      } else {
-        skipped++;
+          .select("*")
+          .eq("order_id", orderId)
+          .maybeSingle();
+
+        if (intent) {
+          const intentRecord = intent as JsonRecord;
+          if (intentRecord.status === "confirmed") { skipped++; continue; }
+
+          const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail);
+          if (activated) {
+            await supabase
+              .from("nowpayments_checkout_intents")
+              .update({ status: "confirmed", payment_id: paymentId, updated_at: new Date().toISOString() })
+              .eq("id", intentRecord.id);
+            synced++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
       }
+
+      // --- Path 2: Historical payment with no intent — write directly to transactions table ---
+      if (amount <= 0) { skipped++; continue; }
+      const creatorIdFromMeta = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
+      const contentIdFromMeta = typeof metadata.content_id === "string" ? metadata.content_id : null;
+      const creatorId = creatorIdFromMeta ?? fallbackCreatorId;
+
+      if (!creatorId) { skipped++; continue; }
+
+      // Check if already synced by payment_id
+      const { data: existing } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("payment_id", paymentId)
+        .maybeSingle();
+      if (existing) { skipped++; continue; }
+
+      const platformFee = Math.round(amount * 0.3 * 100) / 100;
+      const netToCreator = Math.round((amount - platformFee) * 100) / 100;
+
+      // Upsert into transactions table
+      await supabase.from("transactions").insert({
+        payment_id: paymentId,
+        order_id: orderId ?? paymentId,
+        creator_id: creatorId,
+        content_id: contentIdFromMeta ?? null,
+        buyer_id: null,
+        event_type: "payment.succeeded",
+        checkout_type: "content",
+        amount,
+        currency: typeof payment.currency === "string" ? payment.currency : "usd",
+        status: "succeeded",
+        raw_payload: payment,
+      });
+
+      // Also upsert into purchases table so it shows in the admin panel
+      if (contentIdFromMeta) {
+        await supabase.from("purchases").upsert({
+          buyer_id: null,
+          content_id: contentIdFromMeta,
+          amount_paid: amount,
+          payment_id: paymentId,
+          payment_provider: "whop",
+          platform_fee: platformFee,
+          net_to_creator: netToCreator,
+          buyer_email: buyerEmail ?? null,
+        }, { onConflict: "payment_id,content_id", ignoreDuplicates: true });
+      }
+
+      historical++;
     }
 
-    hasMore = typeof result.has_more === "boolean" ? result.has_more : payments.length === 100;
+    hasMore = typeof result.pagination?.total_page === "number"
+      ? page < result.pagination.total_page
+      : typeof result.has_more === "boolean"
+        ? result.has_more
+        : payments.length === 100;
     page++;
   }
 
-  console.log("[whop] sync complete", { synced, skipped, pages: page - 1 });
-  return json({ synced, skipped, pages: page - 1 });
+  console.log("[whop] sync complete", { synced, historical, skipped, pages: page - 1 });
+  return json({ synced, historical, skipped, pages: page - 1 });
 }
 
 async function getCheckoutStatus(req: Request, orderId: string): Promise<Response> {
