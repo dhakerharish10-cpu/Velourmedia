@@ -389,9 +389,12 @@ async function confirmPayment(req: Request, orderId: string): Promise<Response> 
   return json({ order_id: orderId, status: "confirmed", content_id: intentRecord.content_id, creator_id: intentRecord.creator_id });
 }
 
+const ADMIN_EMAIL = "dhakerharish10@gmail.com";
+
 async function requireAdmin(req: Request): Promise<boolean> {
   const user = await requireUser(req);
   if (!user) return false;
+  if (user.email && user.email.toLowerCase().trim() === ADMIN_EMAIL) return true;
   const supabase = getServiceClient();
   const { data: profile } = await supabase
     .from("profiles")

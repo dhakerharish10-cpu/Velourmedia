@@ -85,6 +85,28 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     return () => { active = false; };
   }, [hasAdminAccess, loadData]);
 
+  // Auto-sync Whop payments on first admin page mount
+  const [autoSynced, setAutoSynced] = useState(false);
+  useEffect(() => {
+    if (!hasAdminAccess || autoSynced) return;
+    setAutoSynced(true);
+    (async () => {
+      setSyncing(true);
+      try {
+        const result = await syncWhopPayments();
+        if (result.synced > 0) {
+          addToast(`Auto-synced ${result.synced} payment(s) from Whop.`, 'success');
+          await loadData();
+          await reloadStats();
+        }
+      } catch {
+        // Silent failure on auto-sync — manual button still available
+      } finally {
+        setSyncing(false);
+      }
+    })();
+  }, [hasAdminAccess, autoSynced, addToast, loadData]);
+
   const handleSyncWhop = async () => {
     setSyncing(true);
     try {
