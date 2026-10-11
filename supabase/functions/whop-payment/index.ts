@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 const WHOP_API_BASE = "https://api.whop.com/api/v1";
-const SUBSCRIPTION_AMOUNT = 15;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -92,9 +91,6 @@ async function sendSaleAlertEmail(
     } else if (intent.checkout_type === "tip") {
       contentType = "tip";
       contentTitle = "Tip from a fan";
-    } else if (intent.checkout_type === "subscription") {
-      contentType = "subscription";
-      contentTitle = "Monthly subscription";
     }
 
     const grossAmount = Number(intent.amount).toFixed(2);
@@ -117,7 +113,7 @@ async function sendSaleAlertEmail(
             <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${grossAmount}</td></tr>
             <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (30%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-${(Number(grossAmount) - Number(netAmount)).toFixed(2)}</td></tr>
             <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (70%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">${netAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">${contentType === "subscription" ? "Subscriber" : "Post Title"}</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
           </table>
           <a href="${dashboardLink}" style="display: inline-block; margin-top: 20px; padding: 12px 28px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 14px;">Go to Dashboard</a>
         </div>
@@ -176,21 +172,6 @@ async function activatePurchase(
       }
     } else if (intent.checkout_type === "tip") {
       console.log("[whop] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
-    } else {
-      const { error: subscriptionError } = await supabase.from("subscriptions").upsert({
-        subscriber_id: intent.buyer_id,
-        creator_id: intent.creator_id,
-        amount: intent.amount,
-        status: "active",
-        payment_id: paymentId,
-        payment_provider: "whop",
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-      }, { onConflict: "subscriber_id,creator_id", ignoreDuplicates: true });
-      if (subscriptionError) {
-        console.error("[whop] subscription upsert failed", subscriptionError);
-        return false;
-      }
     }
   }
 
@@ -199,18 +180,17 @@ async function activatePurchase(
 }
 
 async function createCheckout(req: Request, body: JsonRecord): Promise<Response> {
-  const checkoutType = body.kind === "content" ? "content" : body.kind === "tip" ? "tip" : "subscription";
+  const checkoutType = body.kind === "content" ? "content" : body.kind === "tip" ? "tip" : "content";
   const creatorId = typeof body.creator_id === "string" ? body.creator_id : "";
   const contentId = typeof body.content_id === "string" ? body.content_id : null;
   const tipAmount = typeof body.tip_amount === "number" && body.tip_amount > 0 ? body.tip_amount : null;
   const guestDeviceId = typeof body.guest_device_id === "string" ? body.guest_device_id : null;
-  if (!creatorId && checkoutType !== "content") return json({ error: "Creator is required." }, 400);
-  if (!contentId && checkoutType === "content") return json({ error: "Content is required." }, 400);
+  if (!creatorId) return json({ error: "Creator is required." }, 400);
+  if (!contentId) return json({ error: "Content is required." }, 400);
   if (checkoutType === "tip" && !tipAmount) return json({ error: "Tip amount is required." }, 400);
   if (checkoutType === "tip" && tipAmount < 1) return json({ error: "Minimum tip amount is $1.00." }, 400);
 
   const user = await requireUser(req);
-  if (checkoutType === "subscription" && !user) return json({ error: "Authentication required." }, 401);
   if (checkoutType === "tip" && !user && !guestDeviceId) {
     return json({ error: "Either a user session or a guest device ID is required." }, 400);
   }
@@ -226,20 +206,10 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     .maybeSingle();
   if (creatorError || !creator) return json({ error: "Creator not found." }, 404);
 
-  let amount = SUBSCRIPTION_AMOUNT;
-  let description = `Monthly subscription to ${creator.display_name || creator.username}`;
+  let amount = 0;
+  let description = `Tip to ${creator.display_name || creator.username}`;
   if (checkoutType === "tip") {
     amount = tipAmount!;
-    description = `Tip to ${creator.display_name || creator.username}`;
-  } else if (checkoutType === "subscription") {
-    const { data: existing } = await supabase
-      .from("subscriptions")
-      .select("id")
-      .eq("subscriber_id", user!.id)
-      .eq("creator_id", creatorId)
-      .eq("status", "active")
-      .maybeSingle();
-    if (existing) return json({ error: "You are already subscribed to this creator." }, 409);
   } else {
     const { data: content } = await supabase
       .from("content")
@@ -261,6 +231,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     amount = Number(content.price);
     description = content.title;
   }
+  if (!contentId) return json({ error: "Content is required." }, 400);
 
   const apiKey = Deno.env.get("WHOP_API_KEY");
   const companyId = Deno.env.get("WHOP_COMPANY_ID");
@@ -275,19 +246,13 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   const buyerTag = user ? user.id : `g_${guestDeviceId}`;
   const orderId = checkoutType === "content"
     ? `con_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`
-    : checkoutType === "tip"
-    ? `tip_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`
-    : `sub_${crypto.randomUUID()}`;
+    : `tip_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`;
 
   const successUrl = `${appUrl}/#/payment/success?order_id=${encodeURIComponent(orderId)}`;
-  const cancelUrl = checkoutType === "content"
-    ? `${appUrl}/#/u/${encodeURIComponent(contentId!)}`
-    : checkoutType === "tip"
-    ? `${appUrl}/#/u/${encodeURIComponent(contentId || "")}`
-    : `${appUrl}/#/c/${encodeURIComponent(creator.username)}/subscribe`;
+  const cancelUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}`;
 
   // Create a Whop checkout configuration with an inline plan
-  const planType = checkoutType === "subscription" ? "renewal" : "one_time";
+  const planType = "one_time";
   const whopPayload: JsonRecord = {
     mode: "payment",
     return_url: successUrl,
@@ -305,7 +270,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       initial_price: amount,
       currency: "usd",
       title: description,
-      billing_period: checkoutType === "subscription" ? 30 : undefined,
+      billing_period: undefined,
       adaptive_pricing_enabled: false,
     },
   };
@@ -379,6 +344,47 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   });
 }
 
+async function confirmPayment(req: Request, orderId: string): Promise<Response> {
+  if (!orderId) return json({ error: "Order ID is required." }, 400);
+  const supabase = getServiceClient();
+  const { data: intent, error } = await supabase
+    .from("nowpayments_checkout_intents")
+    .select("*")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (error) return json({ error: "Unable to read checkout state." }, 500);
+  if (!intent) return json({ error: "Checkout not found." }, 404);
+
+  const intentRecord = intent as JsonRecord;
+
+  // If already confirmed, just return success
+  if (intentRecord.status === "confirmed") {
+    return json({ order_id: orderId, status: "confirmed", content_id: intentRecord.content_id, creator_id: intentRecord.creator_id, already_confirmed: true });
+  }
+
+  // Authenticate the buyer
+  if (intentRecord.buyer_id) {
+    const user = await requireUser(req);
+    if (!user || user.id !== intentRecord.buyer_id) return json({ error: "Authentication required." }, 401);
+  }
+
+  // Force-confirm the intent and activate the purchase (fallback for webhook delays)
+  const paymentId = typeof intentRecord.payment_id === "string" ? intentRecord.payment_id : `fallback_${orderId}`;
+  const buyerEmail = typeof req.headers.get("X-Buyer-Email") === "string" ? req.headers.get("X-Buyer-Email") : null;
+
+  const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount));
+  if (!activated) return json({ error: "Failed to confirm purchase." }, 500);
+
+  const { error: updateError } = await supabase
+    .from("nowpayments_checkout_intents")
+    .update({ status: "confirmed", payment_id: paymentId, updated_at: new Date().toISOString() })
+    .eq("id", intentRecord.id);
+  if (updateError) console.error("[whop] confirm-payment intent update failed", updateError);
+
+  console.log("[whop] confirm-payment fallback activated for order", orderId);
+  return json({ order_id: orderId, status: "confirmed", content_id: intentRecord.content_id, creator_id: intentRecord.creator_id });
+}
+
 async function getCheckoutStatus(req: Request, orderId: string): Promise<Response> {
   if (!orderId) return json({ error: "Order ID is required." }, 400);
   const supabase = getServiceClient();
@@ -410,6 +416,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({})) as JsonRecord;
     if (action === "create-checkout") return await createCheckout(req, body);
     if (action === "status") return await getCheckoutStatus(req, typeof body.order_id === "string" ? body.order_id : "");
+    if (action === "confirm-payment") return await confirmPayment(req, typeof body.order_id === "string" ? body.order_id : "");
     return json({ error: "Unknown route." }, 404);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error.";

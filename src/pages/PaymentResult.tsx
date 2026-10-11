@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Check, Clock3, Loader2, ArrowRight, AlertCircle, Mail } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { getWhopStatus } from '../lib/whop';
+import { getWhopStatus, confirmPaymentFallback } from '../lib/whop';
 import { createAccessToken } from '../lib/access-links';
 
 interface PaymentResultProps {
@@ -27,6 +27,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
 
     let active = true;
     let attempts = 0;
+    let fallbackTried = false;
     const check = async () => {
       try {
         const result = await getWhopStatus(orderId);
@@ -69,6 +70,44 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
           return;
         }
         setStatus('pending');
+        if (attempts >= 3 && !fallbackTried) {
+          fallbackTried = true;
+          try {
+            const fallback = await confirmPaymentFallback(orderId);
+            if (!active) return;
+            if (fallback.status === 'confirmed' && fallback.content_id) {
+              setContentId(fallback.content_id);
+              if (user) {
+                await refreshPurchases();
+                if (active && !redirectedRef.current) {
+                  redirectedRef.current = true;
+                  setStatus('redirecting');
+                  window.setTimeout(() => {
+                    if (active) onNavigate(`u/${fallback.content_id}`);
+                  }, 1500);
+                }
+              } else if (!tokenCreated) {
+                const guestEmail = sessionStorage.getItem('guest_email');
+                if (guestEmail) {
+                  try {
+                    const tokenResult = await createAccessToken({
+                      contentId: fallback.content_id,
+                      buyerEmail: guestEmail,
+                      orderId,
+                    });
+                    if (active) setAccessLink(tokenResult.access_link);
+                  } catch (err) {
+                    console.error('Failed to create access token:', err);
+                  }
+                }
+                setTokenCreated(true);
+              }
+              return;
+            }
+          } catch (err) {
+            console.error('Fallback confirmation failed:', err);
+          }
+        }
         if (attempts < 10) {
           attempts += 1;
           window.setTimeout(check, 4000);

@@ -45,8 +45,12 @@ export function TransactionsTab({ purchases }: TransactionsTabProps) {
                     <p className="font-medium text-slate-900 dark:text-white truncate max-w-[160px]">{p.content?.title || 'Unknown'}</p>
                     <p className="text-xs text-slate-400 dark:text-zinc-500">@{p.content?.creator?.username || '—'}</p>
                   </td>
-                  <td className="py-3 px-3 text-xs text-slate-600 dark:text-zinc-300 font-mono">
-                    {p.buyer_id.slice(0, 8)}…
+                  <td className="py-3 px-3 text-xs text-slate-600 dark:text-zinc-300">
+                    {p.buyer_email ? (
+                      <span className="font-mono">{p.buyer_email}</span>
+                    ) : (
+                      <span className="font-mono text-slate-400 dark:text-zinc-500">{p.buyer_id.slice(0, 8)}…</span>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-xs text-slate-600 dark:text-zinc-300 font-mono">
                     {p.payment_id ? p.payment_id.slice(0, 16) + '…' : '—'}

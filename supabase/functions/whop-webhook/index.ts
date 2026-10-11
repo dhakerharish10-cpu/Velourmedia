@@ -27,13 +27,6 @@ function getServiceClient() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-/**
- * Verify the Whop webhook signature.
- *
- * Whop signs the string `{webhook-id}.{webhook-timestamp}.{raw-body}` with
- * HMAC-SHA256 using the `ws_...` secret. The `webhook-signature` header
- * contains the result in the format `v1,<base64>`.
- */
 async function verifyWhopSignature(
   rawBody: string,
   headers: Headers,
@@ -52,14 +45,12 @@ async function verifyWhopSignature(
     return false;
   }
 
-  // Reject timestamps older than 5 minutes to prevent replay attacks
   const ts = Number(webhookTimestamp);
   if (isNaN(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
     console.warn("[whop-webhook] timestamp out of range", webhookTimestamp);
     return false;
   }
 
-  // The signed content is: {webhook-id}.{webhook-timestamp}.{raw-body}
   const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody}`;
 
   const key = await crypto.subtle.importKey(
@@ -72,8 +63,6 @@ async function verifyWhopSignature(
   const sigBytes = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedContent));
   const expectedBase64 = btoa(String.fromCharCode(...new Uint8Array(sigBytes)));
 
-  // The header can contain multiple signatures: "v1,xxx v1,yyy"
-  // We check if any match our expected value
   const signatures = signatureHeader.split(" ").map((s) => s.trim());
   for (const sig of signatures) {
     const parts = sig.split(",");
@@ -82,14 +71,25 @@ async function verifyWhopSignature(
     }
   }
 
-  console.warn("[whop-webhook] signature mismatch", { expected: expectedBase64.slice(0, 16), got: signatureHeader.slice(0, 32) });
+  console.warn("[whop-webhook] signature mismatch");
   return false;
+}
+
+function extractEmail(data: JsonRecord): string | null {
+  const customer = data.customer as JsonRecord | undefined;
+  if (customer) {
+    if (typeof customer.email === "string") return customer.email;
+  }
+  if (typeof data.email === "string") return data.email;
+  if (typeof data.buyer_email === "string") return data.buyer_email;
+  return null;
 }
 
 async function activatePurchase(
   supabase: ReturnType<typeof getServiceClient>,
   intent: JsonRecord,
   paymentId: string | null,
+  buyerEmail: string | null,
 ): Promise<boolean> {
   const platformFee = Math.round(Number(intent.amount) * 0.3 * 100) / 100;
   const netToCreator = Math.round((Number(intent.amount) - platformFee) * 100) / 100;
@@ -104,6 +104,7 @@ async function activatePurchase(
         payment_provider: "whop",
         platform_fee: platformFee,
         net_to_creator: netToCreator,
+        buyer_email: buyerEmail,
       }, { onConflict: "buyer_id,content_id", ignoreDuplicates: true });
       if (purchaseError) {
         console.error("[whop-webhook] purchase upsert failed", purchaseError);
@@ -111,21 +112,6 @@ async function activatePurchase(
       }
     } else if (intent.checkout_type === "tip") {
       console.log("[whop-webhook] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
-    } else {
-      const { error: subscriptionError } = await supabase.from("subscriptions").upsert({
-        subscriber_id: intent.buyer_id,
-        creator_id: intent.creator_id,
-        amount: intent.amount,
-        status: "active",
-        payment_id: paymentId,
-        payment_provider: "whop",
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-      }, { onConflict: "subscriber_id,creator_id", ignoreDuplicates: true });
-      if (subscriptionError) {
-        console.error("[whop-webhook] subscription upsert failed", subscriptionError);
-        return false;
-      }
     }
   }
 
@@ -165,9 +151,6 @@ async function sendSaleAlertEmail(
     } else if (intent.checkout_type === "tip") {
       contentType = "tip";
       contentTitle = "Tip from a fan";
-    } else if (intent.checkout_type === "subscription") {
-      contentType = "subscription";
-      contentTitle = "Monthly subscription";
     }
 
     const grossAmount = Number(intent.amount).toFixed(2);
@@ -190,7 +173,7 @@ async function sendSaleAlertEmail(
             <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${grossAmount}</td></tr>
             <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (30%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-${(Number(grossAmount) - Number(netAmount)).toFixed(2)}</td></tr>
             <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (70%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">${netAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">${contentType === "subscription" ? "Subscriber" : "Post Title"}</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
           </table>
           <a href="${dashboardLink}" style="display: inline-block; margin-top: 20px; padding: 12px 28px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 14px;">Go to Dashboard</a>
         </div>
@@ -239,10 +222,11 @@ async function processWebhookEvent(payload: JsonRecord): Promise<void> {
   const successEvents = [
     "payment.captured",
     "payment.succeeded",
+    "payment.completed",
     "checkout.session.completed",
     "order.completed",
+    "action.succeeded",
     "membership.started",
-    "payment.completed",
   ];
 
   if (!successEvents.includes(eventType)) {
@@ -268,9 +252,10 @@ async function processWebhookEvent(payload: JsonRecord): Promise<void> {
 
   const intentRecord = intent as JsonRecord;
   const paymentId = typeof data.id === "string" ? data.id : null;
+  const buyerEmail = extractEmail(data);
   const paidAmount = Number(intentRecord.amount);
 
-  const activated = await activatePurchase(supabase, intentRecord, paymentId);
+  const activated = await activatePurchase(supabase, intentRecord, paymentId, buyerEmail);
   if (!activated) {
     console.error("[whop-webhook] failed to activate purchase for order", orderId);
     return;
@@ -286,19 +271,17 @@ async function processWebhookEvent(payload: JsonRecord): Promise<void> {
     .eq("id", intentRecord.id);
   if (updateError) console.error("[whop-webhook] intent update failed", updateError);
 
-  console.log("[whop-webhook] successfully processed order", orderId);
+  console.log("[whop-webhook] successfully processed order", orderId, { paymentId, buyerEmail, paidAmount });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
-  // Always return 200 OK so Whop doesn't mark the webhook as failing
   if (req.method !== "POST") return ok();
 
   try {
     const rawBody = await req.text();
 
-    // Verify Whop webhook signature
     const whopWebhookSecret = Deno.env.get("WHOP_WEBHOOK_SECRET");
     if (whopWebhookSecret) {
       const isValid = await verifyWhopSignature(rawBody, req.headers, whopWebhookSecret);
@@ -312,13 +295,11 @@ Deno.serve(async (req: Request) => {
 
     const payload = JSON.parse(rawBody) as JsonRecord;
 
-    // Process the event but always return 200 OK so Whop doesn't retry
     await processWebhookEvent(payload);
     return ok();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error.";
     console.error("[whop-webhook] error", message);
-    // Return 200 even on errors to prevent Whop from marking the webhook as failing
     return ok();
   }
 });

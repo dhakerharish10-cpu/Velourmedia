@@ -61,6 +61,7 @@ export interface Purchase {
   payment_provider: string | null;
   platform_fee: number;
   net_to_creator: number;
+  buyer_email: string | null;
   created_at: string;
   content?: Content;
 }

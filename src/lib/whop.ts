@@ -92,3 +92,16 @@ export async function getWhopStatus(orderId: string): Promise<PaymentStatus> {
     content_id: typeof result.content_id === 'string' ? result.content_id : null,
   };
 }
+
+export async function confirmPaymentFallback(orderId: string): Promise<PaymentStatus> {
+  const result = await callWhop('confirm-payment', { order_id: orderId });
+  if (typeof result.order_id !== 'string' || typeof result.status !== 'string') {
+    throw new Error('Payment confirmation failed.');
+  }
+  return {
+    order_id: result.order_id,
+    status: result.status,
+    creator_id: typeof result.creator_id === 'string' ? result.creator_id : '',
+    content_id: typeof result.content_id === 'string' ? result.content_id : null,
+  };
+}
