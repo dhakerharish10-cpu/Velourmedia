@@ -50,13 +50,12 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
   }, [platformSettings]);
 
   const loadData = useCallback(async () => {
-    const [p, c, pu, pa, bd, st, cr] = await Promise.all([
+    const [p, c, pu, pa, bd, cr] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('content').select('*, creator:profiles(*)').order('created_at', { ascending: false }),
       supabase.from('purchases').select('*, content:content(*, creator:profiles(*))').order('created_at', { ascending: false }),
       supabase.from('payouts').select('*, profile:profiles(*)').order('requested_at', { ascending: false }),
       supabase.from('bank_details').select('*'),
-      supabase.rpc('get_admin_stats'),
       supabase.from('content_reports').select('*, content:content(*)').order('created_at', { ascending: false }),
     ]);
 
@@ -67,7 +66,6 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     const bdMap: Record<string, BankDetails> = {};
     (bd.data || []).forEach((b: BankDetails) => { bdMap[b.profile_id] = b; });
     setBankDetailsMap(bdMap);
-    setStats(st.data as unknown as AdminStats);
     setReports((cr.data || []) as ContentReport[]);
   }, []);
 
@@ -79,6 +77,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     (async () => {
       setLoading(true);
       await loadData();
+      await reloadStats();
       if (!active) return;
       setLoading(false);
     })();
@@ -128,8 +127,41 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
   };
 
   const reloadStats = async () => {
-    const { data } = await supabase.rpc('get_admin_stats');
-    if (data) setStats(data as unknown as AdminStats);
+    // Query transactions table directly — extract amount from raw_payload.data.initial_price when amount column is 0
+    const [txRes, profRes, payoutRes] = await Promise.all([
+      supabase.from('transactions').select('amount, raw_payload, status'),
+      supabase.from('profiles').select('is_primary, is_suspended, kyc_status'),
+      supabase.from('payouts').select('status'),
+    ]);
+
+    const txRows = (txRes.data || []) as Array<Record<string, unknown>>;
+    let grossVolume = 0;
+    for (const t of txRows) {
+      let amt = Number(t.amount || 0);
+      if (amt === 0) {
+        const raw = t.raw_payload as Record<string, unknown> | undefined;
+        const rawData = raw?.data as Record<string, unknown> | undefined;
+        const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
+        if (initialPrice > 0) amt = initialPrice;
+      }
+      grossVolume += amt;
+    }
+    const platformProfit = Math.round(grossVolume * 0.3 * 100) / 100;
+
+    const profRows = (profRes.data || []) as Array<Record<string, unknown>>;
+    const activeCreators = profRows.filter((p) => p.is_primary === true && p.is_suspended === false).length;
+    const pendingKyc = profRows.filter((p) => p.kyc_status === 'pending').length;
+
+    const payoutRows = (payoutRes.data || []) as Array<Record<string, unknown>>;
+    const pendingPayouts = payoutRows.filter((p) => p.status === 'pending' || p.status === 'processing').length;
+
+    setStats({
+      total_gross_volume: grossVolume,
+      total_platform_profit: platformProfit,
+      active_creators_count: activeCreators,
+      pending_kyc_count: pendingKyc,
+      pending_payouts_count: pendingPayouts,
+    });
   };
 
   // Redirect non-admins to dashboard with access denied message
