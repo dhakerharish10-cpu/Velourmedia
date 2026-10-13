@@ -7,7 +7,7 @@ import type { Content, ContentMedia } from '../lib/types';
 import {
   ArrowLeft, Lock, Check, Loader2, ImageIcon, Video,
   ChevronLeft, ChevronRight, BadgeCheck, Mail, ArrowRight, Heart,
-  ShieldCheck, Zap, FileText, Flag,
+  ShieldCheck, Shield, Zap, FileText, Flag, Info,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 50;
@@ -583,10 +583,23 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 )}
               </button>
 
-              {/* Trust indicators */}
-              <div className="flex items-center justify-center gap-5 mt-3.5">
+              {/* Tax subtext directly below button */}
+              <p className="text-center text-[11px] text-zinc-600 mt-2.5">
+                Tax calculated next step
+              </p>
+
+              {/* Security disclaimer box */}
+              <div className="mt-3.5 rounded-xl bg-[#0B0B0F] border border-zinc-800/80 px-4 py-3 flex items-start gap-2.5">
+                <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] leading-relaxed text-zinc-500">
+                  velourmedia.site never sees, stores, or saves your card details. Cards you pay with stay on your device only — and are removed the moment you log out.
+                </p>
+              </div>
+
+              {/* Trust badges */}
+              <div className="flex items-center justify-center gap-6 mt-4">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <ShieldCheck size={14} className="text-indigo-400" />
+                  <Shield size={14} className="text-indigo-400" />
                   Secure payment
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
@@ -595,45 +608,26 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </div>
               </div>
 
-              <p className="text-center text-[11px] text-zinc-600 mt-2">
-                Tax calculated next step
-              </p>
-
               {payError && (
                 <p className="text-sm text-rose-400 text-center mt-3 max-w-xs mx-auto">{payError}</p>
               )}
             </div>
 
-            {/* 4. Compliance & Footer Legal Links */}
-            <div className="text-center pt-2 pb-8 space-y-3">
-              <p className="text-xs text-zinc-500">
-                By purchasing, you agree to our{' '}
-                <button onClick={() => onNavigate('legal')} className="text-zinc-400 hover:text-indigo-400 transition-colors underline underline-offset-2">Customer Terms</button>
-                {' '}and{' '}
-                <button onClick={() => onNavigate('legal')} className="text-zinc-400 hover:text-indigo-400 transition-colors underline underline-offset-2">Privacy Policy</button>.
+            {/* 4. Compact footer legal links — very bottom, subtle */}
+            <div className="text-center pt-3 pb-8 space-y-2">
+              <p className="text-[11px] text-zinc-600">
+                By purchasing, you agree to our Customer Terms and Privacy Policy.
               </p>
-              <div className="flex items-center justify-center gap-4">
-                <button
-                  onClick={() => onNavigate('legal')}
-                  className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-indigo-400 transition-colors"
-                >
-                  <FileText size={12} />
+              <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-600">
+                <button onClick={() => onNavigate('legal')} className="hover:text-indigo-400 transition-colors">
                   Customer Terms
                 </button>
-                <span className="text-zinc-700">·</span>
-                <button
-                  onClick={() => onNavigate('legal')}
-                  className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-indigo-400 transition-colors"
-                >
-                  <ShieldCheck size={12} />
+                <span className="text-zinc-700">•</span>
+                <button onClick={() => onNavigate('legal')} className="hover:text-indigo-400 transition-colors">
                   Privacy Policy
                 </button>
-                <span className="text-zinc-700">·</span>
-                <button
-                  onClick={() => onNavigate('support')}
-                  className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-indigo-400 transition-colors"
-                >
-                  <Flag size={12} />
+                <span className="text-zinc-700">•</span>
+                <button onClick={() => onNavigate('support')} className="hover:text-indigo-400 transition-colors">
                   Need help? Report abuse
                 </button>
               </div>
