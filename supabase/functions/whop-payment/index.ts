@@ -177,9 +177,9 @@ function extractNetAmount(payment: JsonRecord): number {
   return 0;
 }
 
-// Resolve creator_id and content_id from Whop payment metadata, with fallback to plan_id lookup
+// Resolve creator_id and content_id STRICTLY from payment metadata — no title/plan/product matching
 async function resolveAttribution(
-  supabase: ReturnType<typeof getServiceClient>,
+  _supabase: ReturnType<typeof getServiceClient>,
   payment: JsonRecord,
 ): Promise<{ creator_id: string | null; content_id: string | null }> {
   const metadata = (payment.metadata ?? {}) as JsonRecord;
@@ -195,48 +195,7 @@ async function resolveAttribution(
   if (metaCreatorId && metaContentId) {
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
-  // Priority 3: plan_id lookup — match Whop plan ID to content.whop_plan_id
-  const planId = typeof payment.plan_id === "string" ? payment.plan_id
-    : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
-    : typeof (payment.product_id as JsonRecord | undefined) === "string" ? payment.product_id as string
-    : null;
-  if (planId) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("whop_plan_id", planId)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
-  // Priority 3b: product_id lookup — match Whop product_id to content.whop_product_id
-  const productId = typeof payment.product_id === "string" ? payment.product_id
-    : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
-    : null;
-  if (productId) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("whop_product_id", productId)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
-  // Priority 4: match by title from raw_payload
-  const data = payment.data as JsonRecord | undefined;
-  const title = typeof data?.title === "string" ? data.title : null;
-  if (title) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("title", title)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
+  // No fallback — return whatever we have (may be null)
   return { creator_id: metaCreatorId, content_id: metaContentId };
 }
 
@@ -408,7 +367,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
 
   console.log("[whop] create-checkout request", { orderId, amount, checkoutType, planType, buyer: buyerTag, successUrl, cancelUrl, apiKeyPrefix: apiKey.slice(0, 8) });
 
-  const checkoutResponse = await fetch(`${WHOP_API_BASE}/checkout_configurations`, {
+  const checkoutResponse = await fetch(`${WHOP_API_BASE}/checkout_sessions`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
@@ -541,15 +500,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
 
   const supabase = getServiceClient();
 
-  // Resolve the primary admin creator profile for historical payments with no intent
-  const { data: adminProfiles } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("is_admin", true)
-    .order("created_at", { ascending: true })
-    .limit(1);
-  const fallbackCreatorId = adminProfiles?.[0]?.id ?? null;
-
   let synced = 0;
   let historical = 0;
   let skipped = 0;
@@ -634,9 +584,9 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       // --- Path 2: Historical payment with no intent — write directly to transactions table ---
       if (baseAmount <= 0) { skipped++; continue; }
 
-      // Resolve creator_id and content_id using multiple fallback strategies
+      // Resolve creator_id and content_id STRICTLY from payment metadata
       const attribution = await resolveAttribution(supabase, payment);
-      const creatorId = attribution.creator_id ?? fallbackCreatorId;
+      const creatorId = attribution.creator_id;
 
       if (!creatorId) { skipped++; continue; }
 

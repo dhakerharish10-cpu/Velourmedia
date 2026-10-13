@@ -92,9 +92,9 @@ function extractNetAmount(data: JsonRecord): number {
   return 0;
 }
 
-// Resolve creator_id and content_id from Whop payment metadata, with fallback to plan_id lookup
+// Resolve creator_id and content_id STRICTLY from payment metadata — no title/plan/product matching
 async function resolveAttribution(
-  supabase: ReturnType<typeof getServiceClient>,
+  _supabase: ReturnType<typeof getServiceClient>,
   payment: JsonRecord,
 ): Promise<{ creator_id: string | null; content_id: string | null }> {
   const metadata = (payment.metadata ?? {}) as JsonRecord;
@@ -110,47 +110,7 @@ async function resolveAttribution(
   if (metaCreatorId && metaContentId) {
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
-  // Priority 3: plan_id lookup — match Whop plan ID to content.whop_plan_id
-  const planId = typeof payment.plan_id === "string" ? payment.plan_id
-    : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
-    : null;
-  if (planId) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("whop_plan_id", planId)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
-  // Priority 3b: product_id lookup — match Whop product_id to content.whop_product_id
-  const productId = typeof payment.product_id === "string" ? payment.product_id
-    : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
-    : null;
-  if (productId) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("whop_product_id", productId)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
-  // Priority 4: match by title from raw_payload
-  const data = payment.data as JsonRecord | undefined;
-  const title = typeof data?.title === "string" ? data.title : null;
-  if (title) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("title", title)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
+  // No fallback — return whatever we have (may be null)
   return { creator_id: metaCreatorId, content_id: metaContentId };
 }
 
