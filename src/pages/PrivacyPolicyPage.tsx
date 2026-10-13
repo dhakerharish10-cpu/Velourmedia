@@ -105,8 +105,8 @@ export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
               <p>
                 If you have questions about this Privacy Policy or wish to exercise your data rights, please
                 contact us at{' '}
-                <a href="mailto:support@velour.app" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-300 transition-colors">
-                  support@velour.app
+                <a href="mailto:support@velourmedia.site" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-300 transition-colors">
+                  support@velourmedia.site
                 </a>
                 .
               </p>

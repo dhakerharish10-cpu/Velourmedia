@@ -123,8 +123,8 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
               <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">9. Contact</h2>
               <p>
                 If you have questions about these Terms of Service, please contact us at{' '}
-                <a href="mailto:support@velour.app" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-300 transition-colors">
-                  support@velour.app
+                <a href="mailto:support@velourmedia.site" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-300 transition-colors">
+                  support@velourmedia.site
                 </a>
                 .
               </p>

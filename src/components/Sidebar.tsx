@@ -208,7 +208,7 @@ export function Sidebar({ current, onNavigate, onClose }: SidebarProps) {
       {/* Support + Sign out */}
       <div className="px-3 py-3 border-t border-slate-200 dark:border-zinc-800 shrink-0 space-y-0.5">
         <a
-          href="mailto:support@velourmedia.com?subject=VelourMedia%20Creator%20Support%20Request"
+          href="mailto:support@velourmedia.site?subject=VelourMedia%20Creator%20Support%20Request"
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
         >
           <Headset size={18} className="text-slate-500 dark:text-zinc-400" />

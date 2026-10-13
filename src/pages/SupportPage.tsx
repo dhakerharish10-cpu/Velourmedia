@@ -145,8 +145,8 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
         <div className="mt-6 rounded-xl bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 p-4 text-center">
           <p className="text-sm text-slate-500 dark:text-zinc-400">
             Email us directly at{' '}
-            <a href="mailto:support@velour.app" className="text-emerald-600 dark:text-emerald-400 font-medium hover:text-emerald-300 transition-colors">
-              support@velour.app
+            <a href="mailto:support@velourmedia.site" className="text-emerald-600 dark:text-emerald-400 font-medium hover:text-emerald-300 transition-colors">
+              support@velourmedia.site
             </a>
           </p>
         </div>
