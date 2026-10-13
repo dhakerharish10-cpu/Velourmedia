@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Profile, SalesVisibility } from '../../lib/types';
-import { SlidersHorizontal, Eye, EyeOff, Save, RotateCcw } from 'lucide-react';
+import { SlidersHorizontal, Eye, EyeOff, Save, RotateCcw, DollarSign, TrendingUp, Receipt } from 'lucide-react';
 
 interface SalesManagementTabProps {
   profiles: Profile[];
@@ -19,6 +19,8 @@ export function SalesManagementTab({ profiles, addToast }: SalesManagementTabPro
   const [creatorHidden, setCreatorHidden] = useState(false);
   const [savingCreator, setSavingCreator] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [txRows, setTxRows] = useState<Array<Record<string, unknown>>>([]);
+  const [txLoading, setTxLoading] = useState(true);
 
   const loadSettings = useCallback(async () => {
     const { data, error } = await supabase.from('sales_visibility').select('*').order('id', { ascending: true });
@@ -31,6 +33,61 @@ export function SalesManagementTab({ profiles, addToast }: SalesManagementTabPro
   }, []);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  const loadTransactions = useCallback(async () => {
+    setTxLoading(true);
+    const [purchRes, txRes] = await Promise.all([
+      supabase.from('purchases').select('*').order('created_at', { ascending: false }),
+      supabase.from('transactions').select('*').order('created_at', { ascending: false }),
+    ]);
+    const merged: Array<Record<string, unknown>> = [];
+    const seen = new Set<string>();
+    for (const p of (purchRes.data || []) as Array<Record<string, unknown>>) {
+      const pid = p.payment_id as string | null;
+      if (pid) seen.add(pid);
+      const amount = Number(p.amount_paid || 0);
+      const platformFee = Number(p.platform_fee || Math.round(amount * 0.3 * 100) / 100);
+      merged.push({
+        ...p,
+        amount,
+        platform_fee: platformFee,
+        creator_earnings: Number(p.net_to_creator || amount - platformFee),
+        source: 'purchases',
+      });
+    }
+    for (const t of (txRes.data || []) as Array<Record<string, unknown>>) {
+      const pid = t.payment_id as string | null;
+      if (pid && seen.has(pid)) continue;
+      const amount = Number(t.amount || 0);
+      const platformFee = Math.round(amount * 0.3 * 100) / 100;
+      merged.push({
+        ...t,
+        amount,
+        platform_fee: platformFee,
+        creator_earnings: Math.round((amount - platformFee) * 100) / 100,
+        source: 'transactions',
+      });
+    }
+    merged.sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime());
+    setTxRows(merged);
+    setTxLoading(false);
+  }, []);
+
+  useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  const txTotals = useMemo(() => {
+    return txRows.reduce(
+      (acc, r) => ({
+        gross: acc.gross + Number(r.amount || 0),
+        platform: acc.platform + Number(r.platform_fee || 0),
+        creator: acc.creator + Number(r.creator_earnings || 0),
+        count: acc.count + 1,
+      }),
+      { gross: 0, platform: 0, creator: 0, count: 0 },
+    );
+  }, [txRows]);
+
+  const fmt = (n: number) => `${Number(n || 0).toFixed(2)}`;
 
   const handleSaveGlobal = async () => {
     setSavingGlobal(true);
@@ -77,6 +134,72 @@ export function SalesManagementTab({ profiles, addToast }: SalesManagementTabPro
 
   return (
     <div className="space-y-6">
+      {/* Sales Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">
+          <DollarSign size={16} className="text-slate-500 dark:text-zinc-400 mb-2" />
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{fmt(txTotals.gross)}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500">Gross Volume</p>
+        </div>
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">
+          <Receipt size={16} className="text-slate-500 dark:text-zinc-400 mb-2" />
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{txTotals.count}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500">Total Sales</p>
+        </div>
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">
+          <TrendingUp size={16} className="text-indigo-600 dark:text-indigo-400 mb-2" />
+          <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{fmt(txTotals.platform)}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500">Platform Fee (30%)</p>
+        </div>
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">
+          <DollarSign size={16} className="text-emerald-600 dark:text-emerald-400 mb-2" />
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{fmt(txTotals.creator)}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500">Creator Earnings</p>
+        </div>
+      </div>
+
+      {/* Recent Transactions */}
+      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
+        <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4">Recent Transactions</h3>
+        {txLoading ? (
+          <div className="py-8 text-center text-slate-400 dark:text-zinc-500">Loading transactions...</div>
+        ) : txRows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Receipt size={24} className="text-slate-300 dark:text-zinc-600 mb-2" />
+            <p className="text-sm text-slate-400 dark:text-zinc-500">No transactions recorded yet.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto max-h-72 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white dark:bg-zinc-900">
+                <tr className="border-b border-slate-200 dark:border-zinc-800 text-left">
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Date</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Amount</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Creator Share</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Platform</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 dark:text-zinc-500">Payment ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txRows.slice(0, 50).map((r) => (
+                  <tr key={`${r.source}-${r.id}`} className="border-b border-slate-100 dark:border-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-800/30">
+                    <td className="py-2 px-3 text-xs text-slate-500 dark:text-zinc-400 whitespace-nowrap">
+                      {new Date(r.created_at as string).toLocaleDateString()}
+                    </td>
+                    <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">{fmt(Number(r.amount))}</td>
+                    <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400">{fmt(Number(r.creator_earnings))}</td>
+                    <td className="py-2 px-3 text-indigo-600 dark:text-indigo-400">{fmt(Number(r.platform_fee))}</td>
+                    <td className="py-2 px-3 text-xs font-mono text-slate-400 dark:text-zinc-500 max-w-[120px] truncate">
+                      {(r.payment_id as string) || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Global Setting */}
       <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
