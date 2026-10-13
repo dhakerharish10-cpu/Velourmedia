@@ -77,7 +77,7 @@ export function SalesManagementTab({ profiles, addToast }: SalesManagementTabPro
 
   const txTotals = useMemo(() => {
     return txRows.reduce(
-      (acc, r) => ({
+      (acc: { gross: number; platform: number; creator: number; count: number }, r) => ({
         gross: acc.gross + Number(r.amount || 0),
         platform: acc.platform + Number(r.platform_fee || 0),
         creator: acc.creator + Number(r.creator_earnings || 0),
@@ -143,7 +143,7 @@ export function SalesManagementTab({ profiles, addToast }: SalesManagementTabPro
         </div>
         <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">
           <Receipt size={16} className="text-slate-500 dark:text-zinc-400 mb-2" />
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{txTotals.count}</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{txTotals.count as number}</p>
           <p className="text-xs text-slate-400 dark:text-zinc-500">Total Sales</p>
         </div>
         <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-4 shadow-sm">

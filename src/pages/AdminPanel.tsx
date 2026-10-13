@@ -18,6 +18,7 @@ import { SalesManagementTab } from '../components/admin/SalesManagementTab';
 interface AdminStats {
   total_gross_volume: number;
   total_platform_profit: number;
+  total_creator_net: number;
   active_creators_count: number;
   pending_kyc_count: number;
   pending_payouts_count: number;
@@ -84,6 +85,22 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     return () => { active = false; };
   }, [hasAdminAccess, loadData]);
 
+  // Realtime subscription: live-update stats when a new transaction is inserted
+  useEffect(() => {
+    if (!hasAdminAccess) return;
+    const channel = supabase
+      .channel('admin-transactions-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => {
+        reloadStats();
+        loadData();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions' }, () => {
+        reloadStats();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [hasAdminAccess]);
+
   // Auto-sync Whop payments on first admin page mount
   const [autoSynced, setAutoSynced] = useState(false);
   useEffect(() => {
@@ -147,6 +164,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
       grossVolume += amt;
     }
     const platformProfit = Math.round(grossVolume * 0.3 * 100) / 100;
+    const creatorNet = Math.round(grossVolume * 0.7 * 100) / 100;
 
     const profRows = (profRes.data || []) as Array<Record<string, unknown>>;
     const activeCreators = profRows.filter((p) => p.is_primary === true && p.is_suspended === false).length;
@@ -158,6 +176,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
     setStats({
       total_gross_volume: grossVolume,
       total_platform_profit: platformProfit,
+      total_creator_net: creatorNet,
       active_creators_count: activeCreators,
       pending_kyc_count: pendingKyc,
       pending_payouts_count: pendingPayouts,
@@ -354,9 +373,10 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
                 </div>
 
                 {/* Stats grid */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <StatCard icon={DollarSign} label="Gross Volume" value={`$${Number(stats?.total_gross_volume || 0).toFixed(2)}`} />
-                  <StatCard icon={Wallet} label="Platform Profit (30%)" value={`$${Number(stats?.total_platform_profit || 0).toFixed(2)}`} accent />
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <StatCard icon={DollarSign} label="Gross Volume" value={`${Number(stats?.total_gross_volume || 0).toFixed(2)}`} />
+                  <StatCard icon={Wallet} label="Platform Fee (30%)" value={`${Number(stats?.total_platform_profit || 0).toFixed(2)}`} accent />
+                  <StatCard icon={Users} label="Creator Net (70%)" value={`${Number(stats?.total_creator_net || 0).toFixed(2)}`} />
                   <StatCard icon={Users} label="Active Creators" value={String(stats?.active_creators_count || 0)} />
                   <StatCard icon={FileCheck} label="Pending KYC" value={String(stats?.pending_kyc_count || 0)} />
                   <StatCard icon={Clock} label="Pending Payouts" value={String(stats?.pending_payouts_count || 0)} />
@@ -744,7 +764,7 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
 
             {/* ============ TRANSACTIONS ============ */}
             {activeTab === 'transactions' && (
-              <TransactionsTab purchases={allPurchases} />
+              <TransactionsTab purchases={allPurchases as unknown as Array<Record<string, unknown>>} />
             )}
 
             {/* ============ DMCA / REPORTS ============ */}
@@ -802,13 +822,37 @@ function CreatorPerformanceTable({
   profiles: Profile[];
   allContent: Content[];
 }) {
+  const [txRows, setTxRows] = useState<Array<{ creator_id: string; amount: number }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabase.from('transactions').select('creator_id, amount, raw_payload');
+      if (!active || !data) return;
+      const rows = (data as Array<Record<string, unknown>>).map((t) => {
+        let amt = Number(t.amount || 0);
+        if (amt === 0) {
+          const raw = t.raw_payload as Record<string, unknown> | undefined;
+          const rawData = raw?.data as Record<string, unknown> | undefined;
+          const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
+          if (initialPrice > 0) amt = initialPrice;
+        }
+        return { creator_id: t.creator_id as string, amount: amt };
+      }).filter((r) => r.creator_id && r.amount > 0);
+      if (active) setTxRows(rows);
+    })();
+    return () => { active = false; };
+  }, [purchases]);
+
   const rows = profiles.map((prof) => {
     const creatorContent = allContent.filter((c) => c.creator_id === prof.id);
     const creatorPurchases = purchases.filter((p) => p.content?.creator?.id === prof.id || creatorContent.some((c) => c.id === p.content_id));
-    const gross = creatorPurchases.reduce((s, p) => s + Number(p.amount_paid), 0);
-    const platformShare = creatorPurchases.reduce((s, p) => s + Number(p.platform_fee || 0), 0);
-    const creatorPayout = creatorPurchases.reduce((s, p) => s + Number(p.net_to_creator || 0), 0);
-    return { prof, posts: creatorContent.length, sales: creatorPurchases.length, gross, platformShare, creatorPayout };
+    const purchaseGross = creatorPurchases.reduce((s, p) => s + Number(p.amount_paid), 0);
+    const txGross = txRows.filter((t) => t.creator_id === prof.id).reduce((s, t) => s + t.amount, 0);
+    const gross = purchaseGross + txGross;
+    const platformShare = Math.round(gross * 0.3 * 100) / 100;
+    const creatorPayout = Math.round(gross * 0.7 * 100) / 100;
+    return { prof, posts: creatorContent.length, sales: creatorPurchases.length + txRows.filter((t) => t.creator_id === prof.id).length, gross, platformShare, creatorPayout };
   }).filter((r) => r.posts > 0 || r.sales > 0).sort((a, b) => b.gross - a.gross);
 
   if (rows.length === 0) return null;

@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../lib/store';
+import { supabase } from '../lib/supabase';
 import {
   Package, Eye, DollarSign, Link2, Copy, Check, Crown, BarChart3,
-  Users, Lock, Unlock, Power, Plus, Search, ExternalLink, ShoppingBag,
+  Lock, Unlock, Power, Plus, Search, ExternalLink, ShoppingBag,
   Pencil, Trash2, Copy as Duplicate, MoreVertical, type LucideIcon,
 } from 'lucide-react';
 
@@ -421,16 +422,93 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
 }
 
 export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: (path: string) => void }) {
-  const { user, myContent, earnings, salesVisibilityPercent } = useStore();
+  const { user, myContent, earnings, salesVisibilityPercent, profile } = useStore();
+  const [postSales, setPostSales] = useState<Array<{ content_id: string; title: string; sales_count: number; gross: number; net: number }>>([]);
+  const [liveGross, setLiveGross] = useState(0);
+
+  const creatorId = profile?.id || user?.id || null;
+
+  const loadPostSales = useCallback(async () => {
+    if (!creatorId) return;
+    const [txRes, purchRes] = await Promise.all([
+      supabase.from('transactions').select('content_id, amount, raw_payload').eq('creator_id', creatorId),
+      supabase.from('purchases').select('content_id, amount_paid, content:content(id, title)'),
+    ]);
+
+    const postMap = new Map<string, { title: string; sales_count: number; gross: number }>();
+
+    // Add purchases
+    for (const p of (purchRes.data || []) as Array<Record<string, unknown>>) {
+      const cid = p.content_id as string;
+      if (!cid) continue;
+      const content = p.content as Record<string, unknown> | undefined;
+      const title = (content?.title as string) || 'Unknown';
+      const amount = Number(p.amount_paid || 0);
+      const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0 };
+      existing.sales_count += 1;
+      existing.gross += amount;
+      postMap.set(cid, existing);
+    }
+
+    // Add transactions (with raw_payload fallback)
+    for (const t of (txRes.data || []) as Array<Record<string, unknown>>) {
+      const cid = t.content_id as string;
+      if (!cid) continue;
+      let amount = Number(t.amount || 0);
+      if (amount === 0) {
+        const raw = t.raw_payload as Record<string, unknown> | undefined;
+        const rawData = raw?.data as Record<string, unknown> | undefined;
+        const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
+        if (initialPrice > 0) amount = initialPrice;
+      }
+      if (amount <= 0) continue;
+      const contentRow = myContent.find((c) => c.id === cid);
+      const title = contentRow?.title || (() => {
+        const raw = t.raw_payload as Record<string, unknown> | undefined;
+        const rawData = raw?.data as Record<string, unknown> | undefined;
+        return (rawData?.title as string) || 'Unknown';
+      })();
+      const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0 };
+      existing.sales_count += 1;
+      existing.gross += amount;
+      postMap.set(cid, existing);
+    }
+
+    const rows = Array.from(postMap.entries()).map(([content_id, data]) => ({
+      content_id,
+      title: data.title,
+      sales_count: data.sales_count,
+      gross: data.gross,
+      net: Math.round(data.gross * 0.7 * 100) / 100,
+    }));
+    setPostSales(rows);
+    setLiveGross(rows.reduce((s, r) => s + r.gross, 0));
+  }, [creatorId, myContent]);
+
+  useEffect(() => {
+    loadPostSales();
+  }, [loadPostSales]);
+
+  // Realtime: live-update when a new transaction comes in for this creator
+  useEffect(() => {
+    if (!creatorId) return;
+    const channel = supabase
+      .channel('creator-analytics-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `creator_id=eq.${creatorId}` }, () => {
+        loadPostSales();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [creatorId, loadPostSales]);
 
   if (!user) return null;
 
   const ratio = salesVisibilityPercent / 100;
   const totalViews = myContent.reduce((sum, item) => sum + (item.views_count || 0), 0);
-  const grossRevenue = Number(earnings?.content_revenue || 0) * ratio;
-  const platformFees = Number(earnings?.platform_fees_paid || 0) * ratio;
-  const netRevenue = grossRevenue - platformFees;
-  const totalSales = Math.round((earnings?.total_sales || 0) * ratio);
+  const grossRevenue = liveGross > 0 ? liveGross : Number(earnings?.content_revenue || 0) * ratio;
+  const platformFees = Math.round(grossRevenue * 0.3 * 100) / 100;
+  const netRevenue = Math.round(grossRevenue * 0.7 * 100) / 100;
+  const totalSales = postSales.reduce((s, r) => s + r.sales_count, 0) || Math.round((earnings?.total_sales || 0) * ratio);
 
   const sortedByViews = [...myContent].sort((a, b) => (b.views_count || 0) - (a.views_count || 0)).slice(0, 5);
 
@@ -494,11 +572,56 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
                   <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
                     <span className="flex items-center gap-1"><Eye size={10} /> {item.views_count || 0}</span>
                     <span className="flex items-center gap-1"><ShoppingBag size={10} /> {item.sales_count || 0}</span>
-                    <span>{item.price === 0 ? 'Free' : `$${Number(item.price).toFixed(2)}`}</span>
+                    <span>{item.price === 0 ? 'Free' : `${Number(item.price).toFixed(2)}`}</span>
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Per-Post Sales Analytics */}
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
+        <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <ShoppingBag size={16} className="text-emerald-500" />
+          Per-Post Sales Analytics
+        </h3>
+        {postSales.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <ShoppingBag size={28} className="text-slate-300 mb-2" />
+            <p className="text-sm text-slate-400">No sales yet. Your per-post breakdown will appear here.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-left">
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400">Post Title</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 text-center">Sales Count</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 text-right">Gross Sales</th>
+                  <th className="py-2 px-3 text-xs font-medium text-slate-400 text-right">Your Earnings (70%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {postSales.map((r) => (
+                  <tr key={r.content_id} className="border-b border-slate-100/50 hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <td className="py-2.5 px-3 font-medium text-slate-900 truncate max-w-[200px]">{r.title}</td>
+                    <td className="py-2.5 px-3 text-center text-slate-600">{r.sales_count}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-slate-900">${r.gross.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-emerald-600">${r.net.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200">
+                  <td colSpan={1} className="py-2.5 px-3 text-right text-xs font-medium text-slate-400">Totals:</td>
+                  <td className="py-2.5 px-3 text-center font-bold text-slate-900">{totalSales}</td>
+                  <td className="py-2.5 px-3 text-right font-bold text-slate-900">${grossRevenue.toFixed(2)}</td>
+                  <td className="py-2.5 px-3 text-right font-bold text-emerald-600">${netRevenue.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         )}
       </div>
