@@ -537,6 +537,17 @@ async function syncWhopPayments(req: Request): Promise<Response> {
 
   const supabase = getServiceClient();
 
+  // Resolve the primary active creator for historical payments that have no metadata and no plan_id match
+  const { data: primaryCreator } = await supabase
+    .from("profiles")
+    .select("id, username")
+    .or("username.eq.kellyisdancinggg,username.eq.kellyisdancing")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const primaryCreatorId = primaryCreator?.id ?? null;
+  console.log("[whop] sync primary creator fallback", { primaryCreatorId, username: primaryCreator?.username });
+
   let synced = 0;
   let historical = 0;
   let skipped = 0;
@@ -621,9 +632,9 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       // --- Path 2: Historical payment with no intent — write directly to transactions table ---
       if (baseAmount <= 0) { skipped++; continue; }
 
-      // Resolve creator_id and content_id STRICTLY from payment metadata
+      // Resolve creator_id and content_id: metadata-first, plan_id/product_id fallback, then primary creator
       const attribution = await resolveAttribution(supabase, payment);
-      const creatorId = attribution.creator_id;
+      const creatorId = attribution.creator_id ?? primaryCreatorId;
 
       if (!creatorId) { skipped++; continue; }
 
