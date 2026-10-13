@@ -167,6 +167,54 @@ function extractNetAmount(payment: JsonRecord): number {
   return 0;
 }
 
+// Resolve creator_id and content_id from Whop payment metadata, with fallback to plan_id lookup
+async function resolveAttribution(
+  supabase: ReturnType<typeof getServiceClient>,
+  payment: JsonRecord,
+): Promise<{ creator_id: string | null; content_id: string | null }> {
+  const metadata = (payment.metadata ?? {}) as JsonRecord;
+  // Priority 1: custom_post_id / custom_creator_id from our checkout metadata
+  const customPostId = typeof metadata.custom_post_id === "string" ? metadata.custom_post_id : null;
+  const customCreatorId = typeof metadata.custom_creator_id === "string" ? metadata.custom_creator_id : null;
+  if (customPostId && customCreatorId) {
+    return { creator_id: customCreatorId, content_id: customPostId };
+  }
+  // Priority 2: creator_id / content_id from metadata
+  const metaCreatorId = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
+  const metaContentId = typeof metadata.content_id === "string" ? metadata.content_id : null;
+  if (metaCreatorId && metaContentId) {
+    return { creator_id: metaCreatorId, content_id: metaContentId };
+  }
+  // Priority 3: plan_id lookup — match Whop plan ID to content.whop_plan_id
+  const planId = typeof payment.plan_id === "string" ? payment.plan_id
+    : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
+    : null;
+  if (planId) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("whop_plan_id", planId)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+  // Priority 4: match by title from raw_payload
+  const data = payment.data as JsonRecord | undefined;
+  const title = typeof data?.title === "string" ? data.title : null;
+  if (title) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("title", title)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+  return { creator_id: metaCreatorId, content_id: metaContentId };
+}
+
 async function activatePurchase(
   supabase: ReturnType<typeof getServiceClient>,
   intent: JsonRecord,
@@ -317,6 +365,8 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       checkout_type: checkoutType,
       creator_id: creatorId,
       content_id: contentId,
+      custom_post_id: contentId,
+      custom_creator_id: creatorId,
       buyer_id: user ? user.id : null,
       guest_device_id: guestDeviceId,
     },
@@ -558,9 +608,10 @@ async function syncWhopPayments(req: Request): Promise<Response> {
 
       // --- Path 2: Historical payment with no intent — write directly to transactions table ---
       if (baseAmount <= 0) { skipped++; continue; }
-      const creatorIdFromMeta = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
-      const contentIdFromMeta = typeof metadata.content_id === "string" ? metadata.content_id : null;
-      const creatorId = creatorIdFromMeta ?? fallbackCreatorId;
+
+      // Resolve creator_id and content_id using multiple fallback strategies
+      const attribution = await resolveAttribution(supabase, payment);
+      const creatorId = attribution.creator_id ?? fallbackCreatorId;
 
       if (!creatorId) { skipped++; continue; }
 
@@ -580,7 +631,7 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         payment_id: paymentId,
         order_id: orderId ?? paymentId,
         creator_id: creatorId,
-        content_id: contentIdFromMeta ?? null,
+        content_id: attribution.content_id,
         buyer_id: null,
         event_type: "payment.succeeded",
         checkout_type: "content",
@@ -593,10 +644,10 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       });
 
       // Also upsert into purchases table so it shows in the admin panel
-      if (contentIdFromMeta) {
+      if (attribution.content_id) {
         await supabase.from("purchases").upsert({
           buyer_id: null,
-          content_id: contentIdFromMeta,
+          content_id: attribution.content_id,
           amount_paid: baseAmount,
           payment_id: paymentId,
           payment_provider: "whop",

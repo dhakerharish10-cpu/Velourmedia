@@ -432,16 +432,18 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
     if (!creatorId) return;
     const [txRes, purchRes] = await Promise.all([
       supabase.from('transactions').select('content_id, amount, raw_payload, creator_earnings').eq('creator_id', creatorId),
-      supabase.from('purchases').select('content_id, amount_paid, content:content(id, title)'),
+      supabase.from('purchases').select('content_id, amount_paid, content:content(id, title, creator_id)'),
     ]);
 
     const postMap = new Map<string, { title: string; sales_count: number; gross: number; net: number }>();
 
-    // Add purchases
+    // Add purchases — only for this creator's content
     for (const p of (purchRes.data || []) as Array<Record<string, unknown>>) {
       const cid = p.content_id as string;
       if (!cid) continue;
       const content = p.content as Record<string, unknown> | undefined;
+      const contentCreatorId = content?.creator_id as string | undefined;
+      if (contentCreatorId !== creatorId) continue;
       const title = (content?.title as string) || 'Unknown';
       const amount = Number(p.amount_paid || 0);
       const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0, net: 0 };

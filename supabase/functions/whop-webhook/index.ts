@@ -86,6 +86,54 @@ function extractNetAmount(data: JsonRecord): number {
   return 0;
 }
 
+// Resolve creator_id and content_id from Whop payment metadata, with fallback to plan_id lookup
+async function resolveAttribution(
+  supabase: ReturnType<typeof getServiceClient>,
+  payment: JsonRecord,
+): Promise<{ creator_id: string | null; content_id: string | null }> {
+  const metadata = (payment.metadata ?? {}) as JsonRecord;
+  // Priority 1: custom_post_id / custom_creator_id from our checkout metadata
+  const customPostId = typeof metadata.custom_post_id === "string" ? metadata.custom_post_id : null;
+  const customCreatorId = typeof metadata.custom_creator_id === "string" ? metadata.custom_creator_id : null;
+  if (customPostId && customCreatorId) {
+    return { creator_id: customCreatorId, content_id: customPostId };
+  }
+  // Priority 2: creator_id / content_id from metadata
+  const metaCreatorId = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
+  const metaContentId = typeof metadata.content_id === "string" ? metadata.content_id : null;
+  if (metaCreatorId && metaContentId) {
+    return { creator_id: metaCreatorId, content_id: metaContentId };
+  }
+  // Priority 3: plan_id lookup — match Whop plan ID to content.whop_plan_id
+  const planId = typeof payment.plan_id === "string" ? payment.plan_id
+    : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
+    : null;
+  if (planId) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("whop_plan_id", planId)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+  // Priority 4: match by title from raw_payload
+  const data = payment.data as JsonRecord | undefined;
+  const title = typeof data?.title === "string" ? data.title : null;
+  if (title) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("title", title)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+  return { creator_id: metaCreatorId, content_id: metaContentId };
+}
+
 function extractEmail(data: JsonRecord): string | null {
   const customer = data.customer as JsonRecord | undefined;
   if (customer) {
@@ -279,7 +327,72 @@ async function processWebhookEvent(payload: JsonRecord): Promise<void> {
   }
 
   if (!orderId) {
-    console.warn("[whop-webhook] no order_id in metadata", payload);
+    // No order_id in metadata — try to resolve attribution from custom fields or plan_id
+    console.log("[whop-webhook] no order_id in metadata, attempting direct attribution", { eventType });
+    const supabase = getServiceClient();
+    const paymentId = typeof data.id === "string" ? data.id : null;
+    if (!paymentId) {
+      console.warn("[whop-webhook] no payment ID in data", payload);
+      return;
+    }
+
+    // Check if already synced
+    const { data: existing } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("payment_id", paymentId)
+      .maybeSingle();
+    if (existing) {
+      console.log("[whop-webhook] transaction already exists for payment", paymentId);
+      return;
+    }
+
+    const attribution = await resolveAttribution(supabase, data);
+    if (!attribution.creator_id) {
+      console.warn("[whop-webhook] could not resolve creator for payment", paymentId);
+      return;
+    }
+
+    const netAmount = extractNetAmount(data);
+    const baseAmount = netAmount > 0 ? netAmount : 0;
+    if (baseAmount <= 0) {
+      console.warn("[whop-webhook] could not extract amount from payment", paymentId);
+      return;
+    }
+
+    const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
+    const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
+
+    await supabase.from("transactions").insert({
+      payment_id: paymentId,
+      order_id: paymentId,
+      creator_id: attribution.creator_id,
+      content_id: attribution.content_id,
+      buyer_id: null,
+      event_type: "payment.succeeded",
+      checkout_type: "content",
+      amount: baseAmount,
+      currency: "usd",
+      status: "succeeded",
+      creator_earnings: netToCreator,
+      platform_earnings: platformFee,
+      raw_payload: payload,
+    });
+
+    if (attribution.content_id) {
+      await supabase.from("purchases").upsert({
+        buyer_id: null,
+        content_id: attribution.content_id,
+        amount_paid: baseAmount,
+        payment_id: paymentId,
+        payment_provider: "whop",
+        platform_fee: platformFee,
+        net_to_creator: netToCreator,
+        buyer_email: extractEmail(data),
+      }, { onConflict: "payment_id,content_id", ignoreDuplicates: true });
+    }
+
+    console.log("[whop-webhook] directly attributed payment", { paymentId, creator: attribution.creator_id, content: attribution.content_id, amount: baseAmount });
     return;
   }
 
@@ -291,6 +404,40 @@ async function processWebhookEvent(payload: JsonRecord): Promise<void> {
     .maybeSingle();
   if (intentError || !intent) {
     console.error("[whop-webhook] checkout not found for order", orderId, intentError);
+    // Fallback: try direct attribution from the payment data
+    const paymentId = typeof data.id === "string" ? data.id : null;
+    if (paymentId) {
+      const { data: existing } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("payment_id", paymentId)
+        .maybeSingle();
+      if (!existing) {
+        const attribution = await resolveAttribution(supabase, data);
+        if (attribution.creator_id) {
+          const netAmt = extractNetAmount(data);
+          if (netAmt > 0) {
+            const pFee = Math.round(netAmt * 0.3 * 100) / 100;
+            const nCreator = Math.round(netAmt * 0.7 * 100) / 100;
+            await supabase.from("transactions").insert({
+              payment_id: paymentId,
+              order_id: orderId,
+              creator_id: attribution.creator_id,
+              content_id: attribution.content_id,
+              event_type: "payment.succeeded",
+              checkout_type: "content",
+              amount: netAmt,
+              currency: "usd",
+              status: "succeeded",
+              creator_earnings: nCreator,
+              platform_earnings: pFee,
+              raw_payload: payload,
+            });
+            console.log("[whop-webhook] fallback attribution for orphaned order", orderId, { paymentId, creator: attribution.creator_id });
+          }
+        }
+      }
+    }
     return;
   }
 

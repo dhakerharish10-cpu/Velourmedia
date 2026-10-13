@@ -30,18 +30,22 @@ export function WalletPage() {
 
   const loadSales = useCallback(async () => {
     if (!creatorId) return;
+    // Only fetch transactions for THIS creator, and only purchases for THIS creator's content
     const [txRes, purchRes] = await Promise.all([
-      supabase.from('transactions').select('id, created_at, amount, raw_payload, content_id').eq('creator_id', creatorId).order('created_at', { ascending: false }),
-      supabase.from('purchases').select('id, created_at, amount_paid, content:content(title)').order('created_at', { ascending: false }),
+      supabase.from('transactions').select('id, created_at, amount, raw_payload, content_id, creator_earnings').eq('creator_id', creatorId).order('created_at', { ascending: false }),
+      supabase.from('purchases').select('id, created_at, amount_paid, content:content(id, title, creator_id)').order('created_at', { ascending: false }),
     ]);
 
     const merged: SaleRow[] = [];
     const seen = new Set<string>();
 
     for (const p of (purchRes.data || []) as Array<Record<string, unknown>>) {
+      const content = p.content as Record<string, unknown> | undefined;
+      const contentCreatorId = content?.creator_id as string | undefined;
+      // Only include purchases for THIS creator's content
+      if (contentCreatorId !== creatorId) continue;
       const pid = p.id as string;
       seen.add(pid);
-      const content = p.content as Record<string, unknown> | undefined;
       const amount = Number(p.amount_paid || 0);
       merged.push({
         id: pid,
