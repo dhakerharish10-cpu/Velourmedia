@@ -177,26 +177,63 @@ function extractNetAmount(payment: JsonRecord): number {
   return 0;
 }
 
-// Resolve creator_id and content_id STRICTLY from payment metadata — no title/plan/product matching
+// Hybrid attribution: metadata-first (strict), plan_id/product_id fallback ONLY for historical payments with no metadata
 async function resolveAttribution(
-  _supabase: ReturnType<typeof getServiceClient>,
+  supabase: ReturnType<typeof getServiceClient>,
   payment: JsonRecord,
 ): Promise<{ creator_id: string | null; content_id: string | null }> {
   const metadata = (payment.metadata ?? {}) as JsonRecord;
-  // Priority 1: custom_post_id / custom_creator_id from our checkout metadata
+
+  // STEP 1 (PRIMARY): Strict metadata attribution — handles all NEW sales with 100% accuracy
   const customPostId = typeof metadata.custom_post_id === "string" ? metadata.custom_post_id : null;
   const customCreatorId = typeof metadata.custom_creator_id === "string" ? metadata.custom_creator_id : null;
   if (customPostId && customCreatorId) {
     return { creator_id: customCreatorId, content_id: customPostId };
   }
-  // Priority 2: creator_id / content_id from metadata
   const metaCreatorId = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
   const metaContentId = typeof metadata.content_id === "string" ? metadata.content_id : null;
   if (metaCreatorId && metaContentId) {
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
-  // No fallback — return whatever we have (may be null)
-  return { creator_id: metaCreatorId, content_id: metaContentId };
+
+  // STEP 2 (HISTORICAL FALLBACK): ONLY if metadata is completely empty — for past payments created before the metadata engine
+  const hasMetadata = Object.keys(metadata).length > 0;
+  if (hasMetadata) {
+    // Metadata exists but doesn't contain our IDs — don't guess, skip
+    return { creator_id: metaCreatorId, content_id: metaContentId };
+  }
+
+  // No metadata at all — try plan_id lookup against content.whop_plan_id
+  const planId = typeof payment.plan_id === "string" ? payment.plan_id
+    : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
+    : null;
+  if (planId) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("whop_plan_id", planId)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+
+  // Try product_id lookup against content.whop_product_id
+  const productId = typeof payment.product_id === "string" ? payment.product_id
+    : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
+    : null;
+  if (productId) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("whop_product_id", productId)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+
+  return { creator_id: null, content_id: null };
 }
 
 async function activatePurchase(
