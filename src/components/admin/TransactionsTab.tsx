@@ -81,18 +81,34 @@ export function TransactionsTab({ purchases: propPurchases }: TransactionsTabPro
         const contentInfo = t.content_id ? contentMap.get(t.content_id as string) : null;
         const creatorUsername = t.creator_id ? profileMap.get(t.creator_id as string) : null;
         const amount = Number(t.amount || 0);
-        const platformFee = Math.round(amount * 0.3 * 100) / 100;
+        let platformFee = Number(t.platform_earnings || 0);
+        let creatorEarnings = Number(t.creator_earnings || 0);
+        let resolvedAmount = amount;
+        if (resolvedAmount === 0 || (platformFee === 0 && creatorEarnings === 0)) {
+          const raw = t.raw_payload as Record<string, unknown> | undefined;
+          const rawData = raw?.data as Record<string, unknown> | undefined;
+          const netAmount = rawData ? Number(rawData.net_amount || 0) : 0;
+          const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
+          if (netAmount > 0) resolvedAmount = netAmount;
+          else if (initialPrice > 0) resolvedAmount = initialPrice;
+          if (platformFee === 0) platformFee = Math.round(resolvedAmount * 0.3 * 100) / 100;
+          if (creatorEarnings === 0) creatorEarnings = Math.round(resolvedAmount * 0.7 * 100) / 100;
+        }
         merged.push({
           id: t.id as string,
           date: t.created_at as string,
-          content_title: contentInfo?.title || null,
+          content_title: contentInfo?.title || (() => {
+            const raw = t.raw_payload as Record<string, unknown> | undefined;
+            const rawData = raw?.data as Record<string, unknown> | undefined;
+            return (rawData?.title as string) || null;
+          })(),
           creator_username: creatorUsername || null,
           buyer_email: null,
           buyer_id: (t.buyer_id as string) || null,
           payment_id: pid,
-          amount,
+          amount: resolvedAmount,
           platform_fee: platformFee,
-          creator_earnings: Math.round((amount - platformFee) * 100) / 100,
+          creator_earnings: creatorEarnings,
           source: 'transactions',
         });
       }

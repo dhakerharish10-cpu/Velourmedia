@@ -58,13 +58,25 @@ export function SalesManagementTab({ profiles, addToast }: SalesManagementTabPro
     for (const t of (txRes.data || []) as Array<Record<string, unknown>>) {
       const pid = t.payment_id as string | null;
       if (pid && seen.has(pid)) continue;
-      const amount = Number(t.amount || 0);
-      const platformFee = Math.round(amount * 0.3 * 100) / 100;
+      // Use creator_earnings and platform_earnings columns when available
+      let amount = Number(t.amount || 0);
+      let platformFee = Number(t.platform_earnings || 0);
+      let creatorEarnings = Number(t.creator_earnings || 0);
+      if (amount === 0 || (platformFee === 0 && creatorEarnings === 0)) {
+        const raw = t.raw_payload as Record<string, unknown> | undefined;
+        const rawData = raw?.data as Record<string, unknown> | undefined;
+        const netAmount = rawData ? Number(rawData.net_amount || 0) : 0;
+        const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
+        if (netAmount > 0) amount = netAmount;
+        else if (initialPrice > 0) amount = initialPrice;
+        if (platformFee === 0) platformFee = Math.round(amount * 0.3 * 100) / 100;
+        if (creatorEarnings === 0) creatorEarnings = Math.round(amount * 0.7 * 100) / 100;
+      }
       merged.push({
         ...t,
         amount,
         platform_fee: platformFee,
-        creator_earnings: Math.round((amount - platformFee) * 100) / 100,
+        creator_earnings: creatorEarnings,
         source: 'transactions',
       });
     }

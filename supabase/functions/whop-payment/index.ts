@@ -146,22 +146,74 @@ async function sendSaleAlertEmail(
   }
 }
 
+function extractNetAmount(payment: JsonRecord): number {
+  // Extract the net amount Whop received after their internal fee deductions
+  // Try net_amount, net_cents, then fall back to initial_price/amount
+  if (typeof payment.net_amount === "number" && payment.net_amount > 0) return payment.net_amount;
+  if (typeof payment.net_cents === "number" && payment.net_cents > 0) return payment.net_cents / 100;
+  const data = payment.data as JsonRecord | undefined;
+  if (data) {
+    if (typeof data.net_amount === "number" && data.net_amount > 0) return data.net_amount;
+    if (typeof data.net_cents === "number" && data.net_cents > 0) return data.net_cents / 100;
+  }
+  // Fallback: use total_cents / initial_price / amount
+  if (typeof payment.total_cents === "number" && payment.total_cents > 0) return payment.total_cents / 100;
+  if (typeof payment.subtotal_cents === "number" && payment.subtotal_cents > 0) return payment.subtotal_cents / 100;
+  if (typeof payment.final_amount === "number" && payment.final_amount > 0) return payment.final_amount;
+  if (data) {
+    if (typeof data.initial_price === "number" && data.initial_price > 0) return data.initial_price;
+    if (typeof data.final_amount === "number" && data.final_amount > 0) return data.final_amount;
+  }
+  return 0;
+}
+
 async function activatePurchase(
   supabase: ReturnType<typeof getServiceClient>,
   intent: JsonRecord,
   paymentId: string | null,
   paidAmount: number,
   buyerEmail?: string | null,
+  whopNetAmount?: number,
 ): Promise<boolean> {
-  const platformFee = Math.round(Number(intent.amount) * 0.3 * 100) / 100;
-  const netToCreator = Math.round((Number(intent.amount) - platformFee) * 100) / 100;
+  // Use the Whop net_amount if available, otherwise fall back to the intent amount
+  const baseAmount = whopNetAmount && whopNetAmount > 0 ? whopNetAmount : Number(intent.amount);
+  const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
+  const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
+
+  // Save to transactions table with creator_earnings and platform_earnings
+  const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : null;
+  const contentId = typeof intent.content_id === "string" ? intent.content_id : null;
+  if (paymentId && creatorId) {
+    const { data: existingTx } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("payment_id", paymentId)
+      .maybeSingle();
+    if (!existingTx) {
+      await supabase.from("transactions").insert({
+        payment_id: paymentId,
+        order_id: typeof intent.order_id === "string" ? intent.order_id : paymentId,
+        creator_id: creatorId,
+        content_id: contentId,
+        buyer_id: typeof intent.buyer_id === "string" ? intent.buyer_id : null,
+        event_type: "payment.succeeded",
+        checkout_type: typeof intent.checkout_type === "string" ? intent.checkout_type : "content",
+        amount: baseAmount,
+        currency: "usd",
+        status: "succeeded",
+        creator_earnings: netToCreator,
+        platform_earnings: platformFee,
+        raw_payload: { data: { net_amount: whopNetAmount, initial_price: Number(intent.amount) } },
+      });
+    }
+  }
 
   if (intent.checkout_type === "content") {
     const buyerId = typeof intent.buyer_id === "string" ? intent.buyer_id : null;
     const { error: purchaseError } = await supabase.from("purchases").upsert({
       buyer_id: buyerId,
-      content_id: intent.content_id,
-      amount_paid: intent.amount,
+      content_id: contentId,
+      amount_paid: baseAmount,
       payment_id: paymentId,
       payment_provider: "whop",
       platform_fee: platformFee,
@@ -176,7 +228,7 @@ async function activatePurchase(
       return false;
     }
   } else if (intent.checkout_type === "tip") {
-    console.log("[whop] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
+    console.log("[whop] tip processed", { buyer: intent.buyer_id, creator: creatorId, amount: baseAmount, net: netToCreator });
   }
 
   await sendSaleAlertEmail(supabase, intent, netToCreator);
@@ -460,12 +512,15 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       const paymentId = typeof payment.id === "string" ? payment.id : null;
       if (!paymentId) { skipped++; continue; }
 
-      // Extract amount — Whop can use total_cents, subtotal_cents, or final_amount
+      // Extract the Whop net amount (after Whop's internal fees)
+      const netAmount = extractNetAmount(payment);
+      // Fall back to gross amount extraction if net_amount not present
       const totalCents = typeof payment.total_cents === "number" ? payment.total_cents
         : typeof payment.subtotal_cents === "number" ? payment.subtotal_cents
         : typeof payment.final_amount === "number" ? payment.final_amount * 100
         : 0;
-      const amount = Math.round(totalCents) / 100;
+      const grossAmount = Math.round(totalCents) / 100;
+      const baseAmount = netAmount > 0 ? netAmount : grossAmount;
 
       const buyerEmail = typeof payment.email === "string" ? payment.email
         : typeof (payment.user as JsonRecord | undefined)?.email === "string" ? (payment.user as JsonRecord).email as string
@@ -487,7 +542,7 @@ async function syncWhopPayments(req: Request): Promise<Response> {
           const intentRecord = intent as JsonRecord;
           if (intentRecord.status === "confirmed") { skipped++; continue; }
 
-          const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail);
+          const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail, baseAmount);
           if (activated) {
             await supabase
               .from("nowpayments_checkout_intents")
@@ -502,7 +557,7 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       }
 
       // --- Path 2: Historical payment with no intent — write directly to transactions table ---
-      if (amount <= 0) { skipped++; continue; }
+      if (baseAmount <= 0) { skipped++; continue; }
       const creatorIdFromMeta = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
       const contentIdFromMeta = typeof metadata.content_id === "string" ? metadata.content_id : null;
       const creatorId = creatorIdFromMeta ?? fallbackCreatorId;
@@ -517,10 +572,10 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         .maybeSingle();
       if (existing) { skipped++; continue; }
 
-      const platformFee = Math.round(amount * 0.3 * 100) / 100;
-      const netToCreator = Math.round((amount - platformFee) * 100) / 100;
+      const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
+      const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
 
-      // Upsert into transactions table
+      // Upsert into transactions table with creator_earnings and platform_earnings
       await supabase.from("transactions").insert({
         payment_id: paymentId,
         order_id: orderId ?? paymentId,
@@ -529,9 +584,11 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         buyer_id: null,
         event_type: "payment.succeeded",
         checkout_type: "content",
-        amount,
+        amount: baseAmount,
         currency: typeof payment.currency === "string" ? payment.currency : "usd",
         status: "succeeded",
+        creator_earnings: netToCreator,
+        platform_earnings: platformFee,
         raw_payload: payment,
       });
 
@@ -540,7 +597,7 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         await supabase.from("purchases").upsert({
           buyer_id: null,
           content_id: contentIdFromMeta,
-          amount_paid: amount,
+          amount_paid: baseAmount,
           payment_id: paymentId,
           payment_provider: "whop",
           platform_fee: platformFee,

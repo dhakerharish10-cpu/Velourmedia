@@ -144,27 +144,35 @@ export function AdminPanel({ onNavigate }: AdminPanelProps) {
   };
 
   const reloadStats = async () => {
-    // Query transactions table directly — extract amount from raw_payload.data.initial_price when amount column is 0
+    // Query transactions table directly — use creator_earnings/platform_earnings columns when available
     const [txRes, profRes, payoutRes] = await Promise.all([
-      supabase.from('transactions').select('amount, raw_payload, status'),
+      supabase.from('transactions').select('amount, raw_payload, status, creator_earnings, platform_earnings'),
       supabase.from('profiles').select('is_primary, is_suspended, kyc_status'),
       supabase.from('payouts').select('status'),
     ]);
 
     const txRows = (txRes.data || []) as Array<Record<string, unknown>>;
     let grossVolume = 0;
+    let platformProfit = 0;
+    let creatorNet = 0;
     for (const t of txRows) {
       let amt = Number(t.amount || 0);
-      if (amt === 0) {
+      let cEarn = Number(t.creator_earnings || 0);
+      let pEarn = Number(t.platform_earnings || 0);
+      if (amt === 0 || (cEarn === 0 && pEarn === 0)) {
         const raw = t.raw_payload as Record<string, unknown> | undefined;
         const rawData = raw?.data as Record<string, unknown> | undefined;
         const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
-        if (initialPrice > 0) amt = initialPrice;
+        const netAmount = rawData ? Number(rawData.net_amount || 0) : 0;
+        if (netAmount > 0) amt = netAmount;
+        else if (initialPrice > 0) amt = initialPrice;
+        if (cEarn === 0) cEarn = Math.round(amt * 0.7 * 100) / 100;
+        if (pEarn === 0) pEarn = Math.round(amt * 0.3 * 100) / 100;
       }
       grossVolume += amt;
+      platformProfit += pEarn;
+      creatorNet += cEarn;
     }
-    const platformProfit = Math.round(grossVolume * 0.3 * 100) / 100;
-    const creatorNet = Math.round(grossVolume * 0.7 * 100) / 100;
 
     const profRows = (profRes.data || []) as Array<Record<string, unknown>>;
     const activeCreators = profRows.filter((p) => p.is_primary === true && p.is_suspended === false).length;
@@ -827,17 +835,21 @@ function CreatorPerformanceTable({
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data } = await supabase.from('transactions').select('creator_id, amount, raw_payload');
+      const { data } = await supabase.from('transactions').select('creator_id, amount, raw_payload, creator_earnings, platform_earnings');
       if (!active || !data) return;
       const rows = (data as Array<Record<string, unknown>>).map((t) => {
         let amt = Number(t.amount || 0);
-        if (amt === 0) {
+        let cEarn = Number(t.creator_earnings || 0);
+        if (amt === 0 || cEarn === 0) {
           const raw = t.raw_payload as Record<string, unknown> | undefined;
           const rawData = raw?.data as Record<string, unknown> | undefined;
+          const netAmount = rawData ? Number(rawData.net_amount || 0) : 0;
           const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
-          if (initialPrice > 0) amt = initialPrice;
+          if (netAmount > 0) amt = netAmount;
+          else if (initialPrice > 0) amt = initialPrice;
+          if (cEarn === 0) cEarn = Math.round(amt * 0.7 * 100) / 100;
         }
-        return { creator_id: t.creator_id as string, amount: amt };
+        return { creator_id: t.creator_id as string, amount: amt, creator_earnings: cEarn };
       }).filter((r) => r.creator_id && r.amount > 0);
       if (active) setTxRows(rows);
     })();
@@ -849,9 +861,10 @@ function CreatorPerformanceTable({
     const creatorPurchases = purchases.filter((p) => p.content?.creator?.id === prof.id || creatorContent.some((c) => c.id === p.content_id));
     const purchaseGross = creatorPurchases.reduce((s, p) => s + Number(p.amount_paid), 0);
     const txGross = txRows.filter((t) => t.creator_id === prof.id).reduce((s, t) => s + t.amount, 0);
+    const txCreatorEarnings = txRows.filter((t) => t.creator_id === prof.id).reduce((s, t) => s + (t.creator_earnings || t.amount * 0.7), 0);
     const gross = purchaseGross + txGross;
     const platformShare = Math.round(gross * 0.3 * 100) / 100;
-    const creatorPayout = Math.round(gross * 0.7 * 100) / 100;
+    const creatorPayout = Math.round((purchaseGross > 0 ? creatorPurchases.reduce((s, p) => s + Number(p.net_to_creator || 0), 0) : 0) + txCreatorEarnings);
     return { prof, posts: creatorContent.length, sales: creatorPurchases.length + txRows.filter((t) => t.creator_id === prof.id).length, gross, platformShare, creatorPayout };
   }).filter((r) => r.posts > 0 || r.sales > 0).sort((a, b) => b.gross - a.gross);
 

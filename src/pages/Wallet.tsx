@@ -56,11 +56,15 @@ export function WalletPage() {
       const tid = t.id as string;
       if (seen.has(tid)) continue;
       let amount = Number(t.amount || 0);
-      if (amount === 0) {
+      let creatorEarnings = Number(t.creator_earnings || 0);
+      if (amount === 0 || creatorEarnings === 0) {
         const raw = t.raw_payload as Record<string, unknown> | undefined;
         const rawData = raw?.data as Record<string, unknown> | undefined;
+        const netAmount = rawData ? Number(rawData.net_amount || 0) : 0;
         const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
-        if (initialPrice > 0) amount = initialPrice;
+        if (netAmount > 0) amount = netAmount;
+        else if (initialPrice > 0) amount = initialPrice;
+        if (creatorEarnings === 0) creatorEarnings = Math.round(amount * 0.7 * 100) / 100;
       }
       if (amount <= 0) continue;
       let title: string | null = null;
@@ -78,7 +82,7 @@ export function WalletPage() {
         date: t.created_at as string,
         title,
         amount,
-        creator_earnings: Math.round(amount * 0.7 * 100) / 100,
+        creator_earnings: creatorEarnings,
       });
     }
 

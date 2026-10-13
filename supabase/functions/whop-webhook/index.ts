@@ -75,6 +75,17 @@ async function verifyWhopSignature(
   return false;
 }
 
+function extractNetAmount(data: JsonRecord): number {
+  // Extract the net amount Whop received after their internal fee deductions
+  if (typeof data.net_amount === "number" && data.net_amount > 0) return data.net_amount;
+  if (typeof data.net_cents === "number" && data.net_cents > 0) return data.net_cents / 100;
+  if (typeof data.total_cents === "number" && data.total_cents > 0) return data.total_cents / 100;
+  if (typeof data.subtotal_cents === "number" && data.subtotal_cents > 0) return data.subtotal_cents / 100;
+  if (typeof data.final_amount === "number" && data.final_amount > 0) return data.final_amount;
+  if (typeof data.initial_price === "number" && data.initial_price > 0) return data.initial_price;
+  return 0;
+}
+
 function extractEmail(data: JsonRecord): string | null {
   const customer = data.customer as JsonRecord | undefined;
   if (customer) {
@@ -90,16 +101,47 @@ async function activatePurchase(
   intent: JsonRecord,
   paymentId: string | null,
   buyerEmail: string | null,
+  whopNetAmount?: number,
 ): Promise<boolean> {
-  const platformFee = Math.round(Number(intent.amount) * 0.3 * 100) / 100;
-  const netToCreator = Math.round((Number(intent.amount) - platformFee) * 100) / 100;
+  // Use the Whop net_amount if available, otherwise fall back to the intent amount
+  const baseAmount = whopNetAmount && whopNetAmount > 0 ? whopNetAmount : Number(intent.amount);
+  const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
+  const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
+
+  // Save to transactions table with creator_earnings and platform_earnings
+  const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : null;
+  const contentId = typeof intent.content_id === "string" ? intent.content_id : null;
+  if (paymentId && creatorId) {
+    const { data: existingTx } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("payment_id", paymentId)
+      .maybeSingle();
+    if (!existingTx) {
+      await supabase.from("transactions").insert({
+        payment_id: paymentId,
+        order_id: typeof intent.order_id === "string" ? intent.order_id : paymentId,
+        creator_id: creatorId,
+        content_id: contentId,
+        buyer_id: typeof intent.buyer_id === "string" ? intent.buyer_id : null,
+        event_type: "payment.succeeded",
+        checkout_type: typeof intent.checkout_type === "string" ? intent.checkout_type : "content",
+        amount: baseAmount,
+        currency: "usd",
+        status: "succeeded",
+        creator_earnings: netToCreator,
+        platform_earnings: platformFee,
+        raw_payload: { data: { net_amount: whopNetAmount, initial_price: Number(intent.amount) } },
+      });
+    }
+  }
 
   if (intent.checkout_type === "content") {
     const buyerId = typeof intent.buyer_id === "string" ? intent.buyer_id : null;
     const { error: purchaseError } = await supabase.from("purchases").upsert({
       buyer_id: buyerId,
-      content_id: intent.content_id,
-      amount_paid: intent.amount,
+      content_id: contentId,
+      amount_paid: baseAmount,
       payment_id: paymentId,
       payment_provider: "whop",
       platform_fee: platformFee,
@@ -114,7 +156,7 @@ async function activatePurchase(
       return false;
     }
   } else if (intent.checkout_type === "tip") {
-    console.log("[whop-webhook] tip processed", { buyer: intent.buyer_id, creator: intent.creator_id, amount: intent.amount, net: netToCreator });
+    console.log("[whop-webhook] tip processed", { buyer: intent.buyer_id, creator: creatorId, amount: baseAmount, net: netToCreator });
   }
 
   return true;
@@ -256,15 +298,17 @@ async function processWebhookEvent(payload: JsonRecord): Promise<void> {
   const paymentId = typeof data.id === "string" ? data.id : null;
   const buyerEmail = extractEmail(data);
   const paidAmount = Number(intentRecord.amount);
+  const netAmount = extractNetAmount(data);
 
-  const activated = await activatePurchase(supabase, intentRecord, paymentId, buyerEmail);
+  const activated = await activatePurchase(supabase, intentRecord, paymentId, buyerEmail, netAmount > 0 ? netAmount : paidAmount);
   if (!activated) {
     console.error("[whop-webhook] failed to activate purchase for order", orderId);
     return;
   }
 
-  const platformFee = Math.round(paidAmount * 0.3 * 100) / 100;
-  const netToCreator = Math.round((paidAmount - platformFee) * 100) / 100;
+  const baseAmount = netAmount > 0 ? netAmount : paidAmount;
+  const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
+  const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
   await sendSaleAlertEmail(supabase, intentRecord, netToCreator);
 
   const { error: updateError } = await supabase

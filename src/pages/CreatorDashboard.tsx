@@ -431,11 +431,11 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
   const loadPostSales = useCallback(async () => {
     if (!creatorId) return;
     const [txRes, purchRes] = await Promise.all([
-      supabase.from('transactions').select('content_id, amount, raw_payload').eq('creator_id', creatorId),
+      supabase.from('transactions').select('content_id, amount, raw_payload, creator_earnings').eq('creator_id', creatorId),
       supabase.from('purchases').select('content_id, amount_paid, content:content(id, title)'),
     ]);
 
-    const postMap = new Map<string, { title: string; sales_count: number; gross: number }>();
+    const postMap = new Map<string, { title: string; sales_count: number; gross: number; net: number }>();
 
     // Add purchases
     for (const p of (purchRes.data || []) as Array<Record<string, unknown>>) {
@@ -444,22 +444,27 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
       const content = p.content as Record<string, unknown> | undefined;
       const title = (content?.title as string) || 'Unknown';
       const amount = Number(p.amount_paid || 0);
-      const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0 };
+      const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0, net: 0 };
       existing.sales_count += 1;
       existing.gross += amount;
+      existing.net += Math.round(amount * 0.7 * 100) / 100;
       postMap.set(cid, existing);
     }
 
-    // Add transactions (with raw_payload fallback)
+    // Add transactions (use creator_earnings column, fallback to raw_payload)
     for (const t of (txRes.data || []) as Array<Record<string, unknown>>) {
       const cid = t.content_id as string;
       if (!cid) continue;
       let amount = Number(t.amount || 0);
-      if (amount === 0) {
+      let net = Number(t.creator_earnings || 0);
+      if (amount === 0 || net === 0) {
         const raw = t.raw_payload as Record<string, unknown> | undefined;
         const rawData = raw?.data as Record<string, unknown> | undefined;
+        const netAmount = rawData ? Number(rawData.net_amount || 0) : 0;
         const initialPrice = rawData ? Number(rawData.initial_price || 0) : 0;
-        if (initialPrice > 0) amount = initialPrice;
+        if (netAmount > 0) amount = netAmount;
+        else if (initialPrice > 0) amount = initialPrice;
+        if (net === 0) net = Math.round(amount * 0.7 * 100) / 100;
       }
       if (amount <= 0) continue;
       const contentRow = myContent.find((c) => c.id === cid);
@@ -468,9 +473,10 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
         const rawData = raw?.data as Record<string, unknown> | undefined;
         return (rawData?.title as string) || 'Unknown';
       })();
-      const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0 };
+      const existing = postMap.get(cid) || { title, sales_count: 0, gross: 0, net: 0 };
       existing.sales_count += 1;
       existing.gross += amount;
+      existing.net += net;
       postMap.set(cid, existing);
     }
 
@@ -479,7 +485,7 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
       title: data.title,
       sales_count: data.sales_count,
       gross: data.gross,
-      net: Math.round(data.gross * 0.7 * 100) / 100,
+      net: Math.round(data.net * 100) / 100,
     }));
     setPostSales(rows);
     setLiveGross(rows.reduce((s, r) => s + r.gross, 0));
