@@ -76,9 +76,15 @@ async function verifyWhopSignature(
 }
 
 function extractNetAmount(data: JsonRecord): number {
-  // Extract the net amount Whop received after their internal fee deductions
-  if (typeof data.net_amount === "number" && data.net_amount > 0) return data.net_amount;
+  // v5 API: net_amount may be in cents; v1 API: may be in dollars
+  if (typeof data.net_amount === "number" && data.net_amount > 0) {
+    return data.net_amount > 1000 ? data.net_amount / 100 : data.net_amount;
+  }
   if (typeof data.net_cents === "number" && data.net_cents > 0) return data.net_cents / 100;
+  if (typeof data.gross_amount === "number" && data.gross_amount > 0) {
+    return data.gross_amount > 1000 ? data.gross_amount / 100 : data.gross_amount;
+  }
+  if (typeof data.gross_cents === "number" && data.gross_cents > 0) return data.gross_cents / 100;
   if (typeof data.total_cents === "number" && data.total_cents > 0) return data.total_cents / 100;
   if (typeof data.subtotal_cents === "number" && data.subtotal_cents > 0) return data.subtotal_cents / 100;
   if (typeof data.final_amount === "number" && data.final_amount > 0) return data.final_amount;
@@ -113,6 +119,20 @@ async function resolveAttribution(
       .from("content")
       .select("id, creator_id")
       .eq("whop_plan_id", planId)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+  // Priority 3b: product_id lookup — match Whop product_id to content.whop_product_id
+  const productId = typeof payment.product_id === "string" ? payment.product_id
+    : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
+    : null;
+  if (productId) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("whop_product_id", productId)
       .maybeSingle();
     if (content) {
       return { creator_id: content.creator_id as string, content_id: content.id as string };

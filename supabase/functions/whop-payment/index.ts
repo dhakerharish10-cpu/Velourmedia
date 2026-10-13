@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-guest-token, X-Buyer-Email",
 };
 
-const WHOP_API_BASE = "https://api.whop.com/api/v1";
+const WHOP_API_BASE = "https://api.whop.com/api/v5";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -148,15 +148,25 @@ async function sendSaleAlertEmail(
 
 function extractNetAmount(payment: JsonRecord): number {
   // Extract the net amount Whop received after their internal fee deductions
-  // Try net_amount, net_cents, then fall back to initial_price/amount
-  if (typeof payment.net_amount === "number" && payment.net_amount > 0) return payment.net_amount;
+  // v5 API: net_amount is in cents, gross_amount is in cents
+  // v1 API: net_amount may be in dollars, net_cents in cents
+  if (typeof payment.net_amount === "number" && payment.net_amount > 0) {
+    // v5 returns cents; v1 may return dollars — detect based on magnitude
+    return payment.net_amount > 1000 ? payment.net_amount / 100 : payment.net_amount;
+  }
   if (typeof payment.net_cents === "number" && payment.net_cents > 0) return payment.net_cents / 100;
   const data = payment.data as JsonRecord | undefined;
   if (data) {
-    if (typeof data.net_amount === "number" && data.net_amount > 0) return data.net_amount;
+    if (typeof data.net_amount === "number" && data.net_amount > 0) {
+      return data.net_amount > 1000 ? data.net_amount / 100 : data.net_amount;
+    }
     if (typeof data.net_cents === "number" && data.net_cents > 0) return data.net_cents / 100;
   }
-  // Fallback: use total_cents / initial_price / amount
+  // Fallback: use gross amounts (less ideal since this is pre-fee)
+  if (typeof payment.gross_amount === "number" && payment.gross_amount > 0) {
+    return payment.gross_amount > 1000 ? payment.gross_amount / 100 : payment.gross_amount;
+  }
+  if (typeof payment.gross_cents === "number" && payment.gross_cents > 0) return payment.gross_cents / 100;
   if (typeof payment.total_cents === "number" && payment.total_cents > 0) return payment.total_cents / 100;
   if (typeof payment.subtotal_cents === "number" && payment.subtotal_cents > 0) return payment.subtotal_cents / 100;
   if (typeof payment.final_amount === "number" && payment.final_amount > 0) return payment.final_amount;
@@ -188,12 +198,27 @@ async function resolveAttribution(
   // Priority 3: plan_id lookup — match Whop plan ID to content.whop_plan_id
   const planId = typeof payment.plan_id === "string" ? payment.plan_id
     : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
+    : typeof (payment.product_id as JsonRecord | undefined) === "string" ? payment.product_id as string
     : null;
   if (planId) {
     const { data: content } = await supabase
       .from("content")
       .select("id, creator_id")
       .eq("whop_plan_id", planId)
+      .maybeSingle();
+    if (content) {
+      return { creator_id: content.creator_id as string, content_id: content.id as string };
+    }
+  }
+  // Priority 3b: product_id lookup — match Whop product_id to content.whop_product_id
+  const productId = typeof payment.product_id === "string" ? payment.product_id
+    : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
+    : null;
+  if (productId) {
+    const { data: content } = await supabase
+      .from("content")
+      .select("id, creator_id")
+      .eq("whop_product_id", productId)
       .maybeSingle();
     if (content) {
       return { creator_id: content.creator_id as string, content_id: content.id as string };
@@ -532,8 +557,8 @@ async function syncWhopPayments(req: Request): Promise<Response> {
   let hasMore = true;
 
   while (hasMore && page <= 20) {
-    // Try both Whop v2 and v1 URL patterns; Whop uses `page` and `per` params
-    const params = new URLSearchParams({ per: "100", page: String(page) });
+    // v5 API supports status=succeeded filter directly
+    const params = new URLSearchParams({ per: "100", page: String(page), status: "succeeded" });
     if (companyId) params.set("company_id", companyId);
     const url = `${WHOP_API_BASE}/payments?${params.toString()}`;
     console.log("[whop] sync fetching page", page, url);
@@ -552,8 +577,8 @@ async function syncWhopPayments(req: Request): Promise<Response> {
     console.log("[whop] sync page", page, "got", payments.length, "payments");
 
     for (const payment of payments) {
+      // v5 API already filters by status=succeeded, but double-check
       const paymentStatus = typeof payment.status === "string" ? payment.status : "";
-      // Accept succeeded, paid, complete, and completed statuses
       if (!["succeeded", "paid", "complete", "completed"].includes(paymentStatus)) {
         skipped++;
         continue;
