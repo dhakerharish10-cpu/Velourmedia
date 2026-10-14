@@ -159,7 +159,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     try {
       await handlePayment(content.id, content.creator_id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Payment failed to initialize.';
+      const message = err instanceof Error ? err.message : 'Could not connect to Whop checkout. Please try again.';
       setPayError(message);
     } finally {
       setPaying(false);
@@ -667,7 +667,7 @@ function TipCard({ creatorId, contentId, creatorName, onTip, user, openAuth }: {
     setTipping(true);
     try {
       await onTip(creatorId, contentId, amount);
-    } finally {
+    } catch {
       setTipping(false);
     }
   };

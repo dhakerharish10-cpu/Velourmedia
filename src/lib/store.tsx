@@ -502,8 +502,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.location.href = checkout.invoice_url;
     } catch (err) {
       setIsRedirecting(false);
-      const message = err instanceof Error ? err.message : 'Payment failed to initialize.';
+      const message = err instanceof Error ? err.message : 'Could not connect to Whop checkout. Please try again.';
       addToast(message, 'error');
+      throw err;
     }
   }, [addToast]);
 
@@ -517,7 +518,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!checkout.invoice_url || !/^https?:\/\//.test(checkout.invoice_url)) {
         console.error('[whop] invalid tip checkout URL', checkout.invoice_url);
         addToast('Unable to open checkout. Please try again.', 'error');
-        return;
+        throw new Error('Unable to open checkout. Please try again.');
       }
       if (checkout.guest_token) {
         sessionStorage.setItem('guest_checkout_token', checkout.guest_token);
@@ -526,8 +527,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.location.href = checkout.invoice_url;
     } catch (err) {
       setIsRedirecting(false);
-      const message = err instanceof Error ? err.message : 'Tip payment failed to initialize.';
+      const message = err instanceof Error ? err.message : 'Could not connect to Whop checkout. Please try again.';
       addToast(message, 'error');
+      throw err;
     }
   }, [addToast]);
 

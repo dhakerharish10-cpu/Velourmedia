@@ -31,15 +31,20 @@ async function callWhop(route: string, payload: Record<string, unknown>): Promis
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Payment service is not configured.');
   const { data: { session } } = await supabase.auth.getSession();
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/whop-payment/${route}`, {
-    method: 'POST',
-    headers: {
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      apikey: SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/functions/v1/whop-payment/${route}`, {
+      method: 'POST',
+      headers: {
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        apikey: SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error('Could not connect to Whop checkout. Please check your connection and try again.');
+  }
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
     const message = typeof body.error === 'string' ? body.error : `Payment request failed (${response.status}).`;
