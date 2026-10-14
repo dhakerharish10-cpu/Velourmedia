@@ -152,12 +152,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
 
     setEmailError(null);
-    if (content.whop_url) {
-      window.location.href = content.whop_url;
-    } else {
-      const whopId = content.whop_product_id || content.whop_plan_id;
-      window.location.href = whopId ? `https://whop.com/checkout/${whopId}` : 'https://whop.com';
-    }
+    window.location.href = content.whop_url || content.checkout_url || `https://whop.com/checkout/${content.whop_product_id}`;
   };
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';

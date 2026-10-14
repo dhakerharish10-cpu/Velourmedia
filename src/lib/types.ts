@@ -40,6 +40,7 @@ export interface Content {
   whop_product_id: string | null;
   whop_plan_id: string | null;
   whop_url: string | null;
+  checkout_url: string | null;
   created_at: string;
   updated_at: string;
   creator?: Profile;

@@ -488,15 +488,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    if (content?.whop_url) {
-      setIsRedirecting(true);
-      window.location.href = content.whop_url;
-      return;
-    }
-    const whopId = content?.whop_product_id || content?.whop_plan_id;
-    if (!whopId) return;
+    if (!content) return;
     setIsRedirecting(true);
-    window.location.href = `https://whop.com/checkout/${whopId}`;
+    window.location.href = content.whop_url || content.checkout_url || `https://whop.com/checkout/${content.whop_product_id}`;
   }, [feed, myContent]);
 
   const isUnlocked = useCallback((contentId: string) => {
@@ -505,15 +499,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, _amount: number) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    if (content?.whop_url) {
-      setIsRedirecting(true);
-      window.location.href = content.whop_url;
-      return;
-    }
-    const whopId = content?.whop_product_id || content?.whop_plan_id;
-    if (!whopId) return;
+    if (!content) return;
     setIsRedirecting(true);
-    window.location.href = `https://whop.com/checkout/${whopId}`;
+    window.location.href = content.whop_url || content.checkout_url || `https://whop.com/checkout/${content.whop_product_id}`;
   }, [feed, myContent]);
 
   const getProfileLink = useCallback((username: string) => {
