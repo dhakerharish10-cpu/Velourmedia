@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const WHOP_API_BASE = "https://api.whop.com/api/v5";
+const WHOP_CHECKOUT_API = "https://api.whop.com/api/v1";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -376,11 +377,21 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   const successUrl = `${appUrl}/#/payment/success?order_id=${encodeURIComponent(orderId)}`;
   const cancelUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}`;
 
+  // Fetch the content's whop_plan_id if it exists — we'll use it for a direct purchase_url fallback
+  let existingPlanId: string | null = null;
+  let existingPurchaseUrl: string | null = null;
+  if (checkoutType === "content" && contentId) {
+    const { data: contentRow } = await supabase
+      .from("content")
+      .select("whop_plan_id")
+      .eq("id", contentId)
+      .maybeSingle();
+    existingPlanId = typeof contentRow?.whop_plan_id === "string" ? contentRow.whop_plan_id : null;
+  }
+
   // Create a Whop checkout configuration with an inline plan
   const planType = "one_time";
   const whopPayload: JsonRecord = {
-    mode: "payment",
-    return_url: successUrl,
     metadata: {
       order_id: orderId,
       checkout_type: checkoutType,
@@ -400,11 +411,12 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       billing_period: undefined,
       adaptive_pricing_enabled: false,
     },
+    redirect_url: successUrl,
   };
 
-  console.log("[whop] create-checkout request", { orderId, amount, checkoutType, planType, buyer: buyerTag, successUrl, cancelUrl, apiKeyPrefix: apiKey.slice(0, 8) });
+  console.log("[whop] create-checkout request", { orderId, amount, checkoutType, planType, buyer: buyerTag, successUrl, cancelUrl, apiKeyPrefix: apiKey.slice(0, 8), existingPlanId });
 
-  const checkoutResponse = await fetch(`${WHOP_API_BASE}/checkout_sessions`, {
+  const checkoutResponse = await fetch(`${WHOP_CHECKOUT_API}/checkout_configurations`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
@@ -414,7 +426,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   });
 
   const checkoutText = await checkoutResponse.text();
-  console.log("[whop] checkout response", { status: checkoutResponse.status, body: checkoutText });
+  console.log("[whop] checkout response", { status: checkoutResponse.status, body: checkoutText.slice(0, 1000) });
 
   let checkoutResult: JsonRecord;
   try {
@@ -423,6 +435,15 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     checkoutResult = {};
   }
 
+  // Parse the checkout URL from the response — Whop v1 returns redirect_url
+  let checkoutUrl = typeof checkoutResult.redirect_url === "string"
+    ? checkoutResult.redirect_url
+    : typeof checkoutResult.purchase_url === "string"
+      ? checkoutResult.purchase_url
+      : typeof checkoutResult.url === "string"
+        ? checkoutResult.url
+        : "";
+
   if (!checkoutResponse.ok) {
     const apiMessage = typeof checkoutResult.message === "string"
       ? checkoutResult.message
@@ -430,21 +451,46 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
         ? checkoutResult.error
         : `Whop returned ${checkoutResponse.status}: ${checkoutText.slice(0, 500)}`;
     console.error("[whop] checkout creation failed", { status: checkoutResponse.status, apiMessage, checkoutResult, requestPayload: whopPayload });
-    return json({ error: `Unable to create the Whop checkout: ${apiMessage}` }, 502);
-  }
 
-  // Whop returns the checkout URL in the "purchase_url" field
-  const checkoutUrl = typeof checkoutResult.purchase_url === "string"
-    ? checkoutResult.purchase_url
-    : typeof checkoutResult.url === "string"
-      ? checkoutResult.url
-      : typeof checkoutResult.checkout_url === "string"
-        ? checkoutResult.checkout_url
-        : "";
+    // FALLBACK: If we have an existing plan_id, construct a direct Whop checkout URL with metadata params
+    if (existingPlanId) {
+      existingPurchaseUrl = `https://whop.com/checkout/${existingPlanId}`;
+      const metaParams = new URLSearchParams({
+        "metadata[order_id]": orderId,
+        "metadata[creator_id]": creatorId,
+        "metadata[content_id]": contentId ?? "",
+        "metadata[checkout_type]": checkoutType,
+        "metadata[custom_post_id]": contentId ?? "",
+        "metadata[custom_creator_id]": creatorId,
+      });
+      if (user) metaParams.set("metadata[buyer_id]", user.id);
+      if (guestDeviceId) metaParams.set("metadata[guest_device_id]", guestDeviceId);
+      checkoutUrl = `${existingPurchaseUrl}?${metaParams.toString()}`;
+      console.log("[whop] fallback to direct purchase_url with metadata", { existingPlanId, checkoutUrl });
+    } else {
+      return json({ error: `Unable to create the Whop checkout: ${apiMessage}` }, 502);
+    }
+  }
 
   if (!checkoutUrl) {
     console.error("[whop] no checkout URL in response", checkoutResult);
-    return json({ error: "Whop checkout did not return a valid URL." }, 502);
+    // Last-resort fallback: try direct plan purchase URL
+    if (existingPlanId) {
+      const metaParams = new URLSearchParams({
+        "metadata[order_id]": orderId,
+        "metadata[creator_id]": creatorId,
+        "metadata[content_id]": contentId ?? "",
+        "metadata[checkout_type]": checkoutType,
+        "metadata[custom_post_id]": contentId ?? "",
+        "metadata[custom_creator_id]": creatorId,
+      });
+      if (user) metaParams.set("metadata[buyer_id]", user.id);
+      if (guestDeviceId) metaParams.set("metadata[guest_device_id]", guestDeviceId);
+      checkoutUrl = `https://whop.com/checkout/${existingPlanId}?${metaParams.toString()}`;
+      console.log("[whop] last-resort fallback to direct purchase_url", { existingPlanId, checkoutUrl });
+    } else {
+      return json({ error: "Whop checkout did not return a valid URL." }, 502);
+    }
   }
 
   // Store the checkout intent in the database (reusing the nowpayments_checkout_intents table)
