@@ -287,7 +287,7 @@ export function DashboardHome({ onNavigate }: { onNavigate: (path: string) => vo
                     <ActionButton icon={isPrivate ? Unlock : Lock} label={isPrivate ? 'Make Public' : 'Make Private'} onClick={() => handleTogglePrivate(item.id, !isPrivate)} color="slate" />
                     <ActionButton icon={Power} label={isActive ? 'Deactivate' : 'Activate'} onClick={() => handleToggleActive(item.id, !isActive)} color={isActive ? 'amber' : 'emerald'} />
                     <div className="flex-1" />
-                    <button onClick={() => onNavigate(`u/${item.id}`)} className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-500 dark:hover:text-slate-700 dark:text-zinc-300 dark:hover:bg-slate-100 dark:bg-zinc-800 transition-colors" title="View">
+                    <button onClick={() => onNavigate(`/u/${item.id}`)} className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-500 dark:hover:text-slate-700 dark:text-zinc-300 dark:hover:bg-slate-100 dark:bg-zinc-800 transition-colors" title="View">
                       <Eye size={15} />
                     </button>
                     <button onClick={() => handleDelete(item.id)} className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-zinc-500 dark:hover:text-rose-600 dark:text-rose-400 dark:hover:bg-rose-500/10 transition-colors" title="Delete">

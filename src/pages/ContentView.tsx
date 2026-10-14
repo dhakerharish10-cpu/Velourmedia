@@ -193,8 +193,14 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             <p className="text-sm text-slate-400 dark:text-zinc-500 mt-3">Loading...</p>
           </div>
         ) : !content ? (
-          <div className="py-20 text-center">
+          <div className="py-20 text-center space-y-4">
             <p className="text-slate-500 dark:text-zinc-400">Content not found.</p>
+            <button
+              onClick={() => onNavigate('')}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors"
+            >
+              Back to Home
+            </button>
           </div>
         ) : hasAccess ? (
           /* ---- UNLOCKED VIEW ---- */

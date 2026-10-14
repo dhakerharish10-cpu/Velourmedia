@@ -15,7 +15,7 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
 
   return (
     <button
-      onClick={() => onNavigate(`u/${content.id}`)}
+      onClick={() => onNavigate(`/u/${content.id}`)}
       className="group relative rounded-xl overflow-hidden bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-all text-left"
     >
       <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-black/40 relative">

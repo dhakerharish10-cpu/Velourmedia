@@ -61,7 +61,7 @@ export function PurchaseLibrary({ onNavigate }: PurchaseLibraryProps) {
                   key={purchase.id}
                   className="group relative rounded-xl overflow-hidden bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-slate-200 dark:border-zinc-700 transition-all"
                 >
-                  <button onClick={() => onNavigate(`u/${content.id}`)} className="block w-full text-left">
+                  <button onClick={() => onNavigate(`/u/${content.id}`)} className="block w-full text-left">
                     <div className="aspect-square overflow-hidden bg-black/40">
                       {content.media_type === 'image' ? (
                         <img

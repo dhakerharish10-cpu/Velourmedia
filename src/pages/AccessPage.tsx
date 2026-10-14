@@ -101,7 +101,7 @@ export function AccessPage({ token, onNavigate }: AccessPageProps) {
               </p>
               {expiredContentId && (
                 <button
-                  onClick={() => onNavigate(`u/${expiredContentId}`)}
+                  onClick={() => onNavigate(`/u/${expiredContentId}`)}
                   className="mt-6 w-full rounded-xl bg-gradient-brand text-white font-semibold text-sm py-3 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                 >
                   Re-purchase Access

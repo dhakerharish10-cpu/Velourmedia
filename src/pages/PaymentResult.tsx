@@ -41,7 +41,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
               redirectedRef.current = true;
               setStatus('redirecting');
               window.setTimeout(() => {
-                if (active) onNavigate(`u/${result.content_id}`);
+                if (active) onNavigate(`/u/${result.content_id}`);
               }, 1500);
             } else if (active) {
               setStatus('confirmed');
@@ -83,7 +83,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
                   redirectedRef.current = true;
                   setStatus('redirecting');
                   window.setTimeout(() => {
-                    if (active) onNavigate(`u/${fallback.content_id}`);
+                    if (active) onNavigate(`/u/${fallback.content_id}`);
                   }, 1500);
                 }
               } else if (!tokenCreated) {
@@ -168,7 +168,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
         {status === 'confirmed' && (
           <>
             <button
-              onClick={() => onNavigate(contentId ? `u/${contentId}` : '')}
+              onClick={() => onNavigate(contentId ? `/u/${contentId}` : '')}
               className="mt-7 w-full rounded-xl bg-white dark:bg-zinc-900 px-5 py-3.5 text-sm font-semibold text-slate-900 dark:text-white hover:bg-slate-100 dark:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
             >
               {contentId ? 'View content' : 'Continue browsing'}
@@ -187,7 +187,7 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
         )}
         {status === 'redirecting' && contentId && (
           <button
-            onClick={() => onNavigate(`u/${contentId}`)}
+            onClick={() => onNavigate(`/u/${contentId}`)}
             className="mt-7 w-full rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2"
           >
             Go to content now
