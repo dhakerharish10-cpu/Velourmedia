@@ -183,8 +183,10 @@ function Router() {
     );
   }
 
+  const creatorSubRoutes = ['creator-profile', 'creator-analytics', 'creator-settings'];
+
   // Catch-all: redirect any unrecognized route to home
-  if (first !== 'dashboard' && first !== 'home' && first !== 'wallet' && first !== 'kyc' && first !== 'refer' && first !== 'settings' && !creatorSubRoutes.includes(first)) {
+  if (first !== 'dashboard' && first !== 'home' && first !== 'wallet' && first !== 'kyc' && first !== 'refer' && first !== 'settings' && first !== 'library' && !creatorSubRoutes.includes(first)) {
     return (
       <>
         <Landing onNavigate={navigate} />
@@ -207,7 +209,6 @@ function Router() {
 
   // Sidebar app routes (require auth)
   const sidebarRoutes: AppRoute[] = ['home', 'wallet', 'kyc', 'refer', 'settings'];
-  const creatorSubRoutes = ['creator-profile', 'creator-analytics', 'creator-settings'];
   let currentRoute: AppRoute = 'home';
 
   if (first === 'dashboard' || first === 'home') currentRoute = 'home';
