@@ -111,14 +111,14 @@ async function resolveAttribution(
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
 
-  // STEP 2 (HISTORICAL FALLBACK): ONLY if metadata is completely empty — for past payments created before the metadata engine
-  const hasMetadata = Object.keys(metadata).length > 0;
-  if (hasMetadata) {
-    // Metadata exists but doesn't contain our IDs — don't guess, skip
+  // STEP 2 (HISTORICAL FALLBACK): If our custom IDs aren't in metadata, try plan_id/product_id lookup
+  const hasOurIds = metaCreatorId && metaContentId;
+  if (hasOurIds) {
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
 
-  // No metadata at all — try plan_id lookup against content.whop_plan_id
+  // Always try plan_id/product_id lookup when our metadata IDs are missing
+  // (covers direct checkout redirects that don't pass our metadata)
   const planId = typeof payment.plan_id === "string" ? payment.plan_id
     : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
     : null;
