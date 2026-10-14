@@ -24,14 +24,12 @@ interface ContentViewProps {
 }
 
 export function ContentView({ contentId, onNavigate }: ContentViewProps) {
-  const { user, isUnlocked, handlePayment, handleTipPayment, openAuth, refreshPurchases } = useStore();
+  const { user, isUnlocked, handleTipPayment, openAuth, refreshPurchases } = useStore();
   const [content, setContent] = useState<Content | null>(null);
   const [mediaItems, setMediaItems] = useState<ContentMedia[]>([]);
   const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [guestUnlocked, setGuestUnlocked] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
   const [guestEmail, setGuestEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [justPurchased, setJustPurchased] = useState(false);
@@ -137,7 +135,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-  const onPayToUnlock = async () => {
+  const onPayToUnlock = () => {
     if (!content) return;
 
     if (!user) {
@@ -154,8 +152,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
 
     setEmailError(null);
-    setPaying(true);
-    await handlePayment(content.id, content.creator_id);
+    const whopId = content.whop_product_id || content.whop_plan_id;
+    if (whopId) {
+      window.location.href = `https://whop.com/checkout/${whopId}`;
+    }
   };
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
@@ -565,20 +565,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               {/* Unlock button — clean, full-width */}
               <button
                 onClick={onPayToUnlock}
-                disabled={paying}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98]"
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98]"
               >
-                {paying ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Opening checkout...
-                  </>
-                ) : (
-                  <>
-                    <Lock size={18} />
-                    Unlock for ${priceDisplay}
-                  </>
-                )}
+                <Lock size={18} />
+                Unlock for ${priceDisplay}
               </button>
 
               {/* Tax subtext directly below button */}
@@ -606,9 +596,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </div>
               </div>
 
-              {payError && (
-                <p className="text-sm text-rose-400 text-center mt-3 max-w-xs mx-auto">{payError}</p>
-              )}
             </div>
 
             {/* 4. Compact footer legal links — very bottom, subtle */}
@@ -647,21 +634,15 @@ function TipCard({ creatorId, contentId, creatorName, onTip, user, openAuth }: {
 }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
-  const [tipping, setTipping] = useState(false);
 
   const presets = [5, 10, 20];
 
-  const handleTip = async (amount: number) => {
+  const handleTip = (amount: number) => {
     if (!user) {
       openAuth('signin');
       return;
     }
-    setTipping(true);
-    try {
-      await onTip(creatorId, contentId, amount);
-    } catch {
-      setTipping(false);
-    }
+    onTip(creatorId, contentId, amount);
   };
 
   const handleCustomTip = () => {
@@ -683,8 +664,7 @@ function TipCard({ creatorId, contentId, creatorName, onTip, user, openAuth }: {
           <button
             key={amt}
             onClick={() => handleTip(amt)}
-            disabled={tipping}
-            className="px-5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 text-sm font-semibold text-slate-700 dark:text-zinc-300 hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 text-sm font-semibold text-slate-700 dark:text-zinc-300 hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all"
           >
             ${amt}
           </button>
@@ -713,21 +693,15 @@ function TipCard({ creatorId, contentId, creatorName, onTip, user, openAuth }: {
           </div>
           <button
             onClick={handleCustomTip}
-            disabled={tipping || !customAmount || parseFloat(customAmount) < 1}
+            disabled={!customAmount || parseFloat(customAmount) < 1}
             className="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
-            {tipping ? <Loader2 size={14} className="animate-spin" /> : <Heart size={14} />}
+            <Heart size={14} />
             Send Tip
           </button>
         </div>
       )}
 
-      {tipping && (
-        <p className="text-xs text-slate-400 dark:text-zinc-500 mt-3 flex items-center gap-1.5">
-          <Loader2 size={12} className="animate-spin" />
-          Opening checkout...
-        </p>
-      )}
     </div>
   );
 }
