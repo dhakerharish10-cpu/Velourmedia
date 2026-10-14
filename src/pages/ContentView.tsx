@@ -155,15 +155,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
     setEmailError(null);
     setPaying(true);
-    setPayError(null);
-    try {
-      await handlePayment(content.id, content.creator_id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not connect to Whop checkout. Please try again.';
-      setPayError(message);
-    } finally {
-      setPaying(false);
-    }
+    await handlePayment(content.id, content.creator_id);
   };
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';

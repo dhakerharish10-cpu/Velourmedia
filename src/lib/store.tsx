@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { Profile, Content, Purchase, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
-import { createWhopCheckout } from './whop';
 
 interface Toast {
   id: string;
@@ -487,51 +486,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [user, platformSettings, refreshPurchases, refreshFeed]);
 
-  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
-    try {
-      const checkout = await createWhopCheckout({ creatorId, contentId });
-      if (!checkout.invoice_url || !/^https:\/\/whop\.com/.test(checkout.invoice_url)) {
-        console.error('[whop] invalid checkout URL — not a whop.com URL', checkout.invoice_url);
-        addToast('Unable to open checkout. Please try again.', 'error');
-        throw new Error('Unable to open checkout. Please try again.');
-      }
-      if (checkout.guest_token) {
-        sessionStorage.setItem('guest_checkout_token', checkout.guest_token);
-      }
-      setIsRedirecting(true);
-      window.location.href = checkout.invoice_url;
-    } catch (err) {
-      setIsRedirecting(false);
-      const message = err instanceof Error ? err.message : 'Could not connect to Whop checkout. Please try again.';
-      addToast(message, 'error');
-      throw err;
-    }
-  }, [addToast]);
+  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
+    const content = [...feed, ...myContent].find((c) => c.id === contentId);
+    const whopId = content?.whop_product_id || content?.whop_plan_id;
+    if (!whopId) return;
+    setIsRedirecting(true);
+    window.location.href = `https://whop.com/checkout/${whopId}`;
+  }, [feed, myContent]);
 
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, amount: number) => {
-    try {
-      const checkout = await createWhopCheckout({ creatorId, contentId, tipAmount: amount });
-      if (!checkout.invoice_url || !/^https:\/\/whop\.com/.test(checkout.invoice_url)) {
-        console.error('[whop] invalid tip checkout URL — not a whop.com URL', checkout.invoice_url);
-        addToast('Unable to open checkout. Please try again.', 'error');
-        throw new Error('Unable to open checkout. Please try again.');
-      }
-      if (checkout.guest_token) {
-        sessionStorage.setItem('guest_checkout_token', checkout.guest_token);
-      }
-      setIsRedirecting(true);
-      window.location.href = checkout.invoice_url;
-    } catch (err) {
-      setIsRedirecting(false);
-      const message = err instanceof Error ? err.message : 'Could not connect to Whop checkout. Please try again.';
-      addToast(message, 'error');
-      throw err;
-    }
-  }, [addToast]);
+  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, _amount: number) => {
+    const content = [...feed, ...myContent].find((c) => c.id === contentId);
+    const whopId = content?.whop_product_id || content?.whop_plan_id;
+    if (!whopId) return;
+    setIsRedirecting(true);
+    window.location.href = `https://whop.com/checkout/${whopId}`;
+  }, [feed, myContent]);
 
   const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';
