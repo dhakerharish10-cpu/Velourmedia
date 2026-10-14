@@ -72,6 +72,10 @@ export async function createWhopCheckout(payload: {
     console.error('[whop] create-checkout returned an invalid response', result);
     throw new Error(typeof result.error === 'string' ? result.error : 'The payment checkout could not be created.');
   }
+  if (!/^https:\/\/whop\.com/.test(result.invoice_url)) {
+    console.error('[whop] create-checkout returned a non-whop URL', result.invoice_url);
+    throw new Error('The payment checkout returned an invalid URL. Please try again.');
+  }
   return {
     order_id: result.order_id,
     invoice_url: result.invoice_url,

@@ -525,6 +525,11 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     return json({ error: "Unable to save checkout state." }, 500);
   }
 
+  if (!checkoutUrl || !/^https:\/\/whop\.com/.test(checkoutUrl)) {
+    console.error("[whop] final checkout URL is not a valid whop.com URL", checkoutUrl);
+    return json({ error: "Unable to create a valid Whop checkout URL. Please try again." }, 502);
+  }
+
   return json({
     order_id: orderId,
     invoice_url: checkoutUrl,

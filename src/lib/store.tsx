@@ -490,10 +490,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
     try {
       const checkout = await createWhopCheckout({ creatorId, contentId });
-      if (!checkout.invoice_url || !/^https?:\/\//.test(checkout.invoice_url)) {
-        console.error('[whop] invalid checkout URL', checkout.invoice_url);
+      if (!checkout.invoice_url || !/^https:\/\/whop\.com/.test(checkout.invoice_url)) {
+        console.error('[whop] invalid checkout URL — not a whop.com URL', checkout.invoice_url);
         addToast('Unable to open checkout. Please try again.', 'error');
-        return;
+        throw new Error('Unable to open checkout. Please try again.');
       }
       if (checkout.guest_token) {
         sessionStorage.setItem('guest_checkout_token', checkout.guest_token);
@@ -515,8 +515,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, amount: number) => {
     try {
       const checkout = await createWhopCheckout({ creatorId, contentId, tipAmount: amount });
-      if (!checkout.invoice_url || !/^https?:\/\//.test(checkout.invoice_url)) {
-        console.error('[whop] invalid tip checkout URL', checkout.invoice_url);
+      if (!checkout.invoice_url || !/^https:\/\/whop\.com/.test(checkout.invoice_url)) {
+        console.error('[whop] invalid tip checkout URL — not a whop.com URL', checkout.invoice_url);
         addToast('Unable to open checkout. Please try again.', 'error');
         throw new Error('Unable to open checkout. Please try again.');
       }
