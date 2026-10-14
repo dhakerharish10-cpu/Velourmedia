@@ -436,13 +436,27 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   }
 
   // Parse the checkout URL from the response — Whop v1 returns redirect_url
-  let checkoutUrl = typeof checkoutResult.redirect_url === "string"
+  // Per docs, redirect_url is a relative path like "/checkout/ch_xxxx/"
+  // We must prepend the Whop base domain to get a usable absolute URL
+  let rawCheckoutUrl = typeof checkoutResult.redirect_url === "string"
     ? checkoutResult.redirect_url
     : typeof checkoutResult.purchase_url === "string"
       ? checkoutResult.purchase_url
       : typeof checkoutResult.url === "string"
         ? checkoutResult.url
         : "";
+
+  // Normalize to an absolute URL — Whop returns relative paths like "/checkout/ch_xxx/"
+  let checkoutUrl = "";
+  if (rawCheckoutUrl) {
+    if (rawCheckoutUrl.startsWith("http://") || rawCheckoutUrl.startsWith("https://")) {
+      checkoutUrl = rawCheckoutUrl;
+    } else if (rawCheckoutUrl.startsWith("/")) {
+      checkoutUrl = `https://whop.com${rawCheckoutUrl}`;
+    } else {
+      checkoutUrl = `https://whop.com/${rawCheckoutUrl}`;
+    }
+  }
 
   if (!checkoutResponse.ok) {
     const apiMessage = typeof checkoutResult.message === "string"
