@@ -488,6 +488,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
+    if (content?.whop_url) {
+      setIsRedirecting(true);
+      window.location.href = content.whop_url;
+      return;
+    }
     const whopId = content?.whop_product_id || content?.whop_plan_id;
     if (!whopId) return;
     setIsRedirecting(true);
@@ -500,6 +505,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, _amount: number) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
+    if (content?.whop_url) {
+      setIsRedirecting(true);
+      window.location.href = content.whop_url;
+      return;
+    }
     const whopId = content?.whop_product_id || content?.whop_plan_id;
     if (!whopId) return;
     setIsRedirecting(true);
