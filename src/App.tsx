@@ -183,6 +183,17 @@ function Router() {
     );
   }
 
+  // Catch-all: redirect any unrecognized route to home
+  if (first !== 'dashboard' && first !== 'home' && first !== 'wallet' && first !== 'kyc' && first !== 'refer' && first !== 'settings' && !creatorSubRoutes.includes(first)) {
+    return (
+      <>
+        <Landing onNavigate={navigate} />
+        <ToastContainer />
+        <AuthModal onNavigate={navigate} />
+      </>
+    );
+  }
+
   // Library (no sidebar)
   if (first === 'library') {
     return (

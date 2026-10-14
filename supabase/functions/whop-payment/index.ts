@@ -412,6 +412,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       adaptive_pricing_enabled: false,
     },
     redirect_url: successUrl,
+    cancel_url: cancelUrl,
   };
 
   console.log("[whop] create-checkout request", { orderId, amount, checkoutType, planType, buyer: buyerTag, successUrl, cancelUrl, apiKeyPrefix: apiKey.slice(0, 8), existingPlanId });

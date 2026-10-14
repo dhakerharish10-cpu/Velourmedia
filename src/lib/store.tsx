@@ -501,6 +501,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setIsRedirecting(true);
       window.location.href = checkout.invoice_url;
     } catch (err) {
+      setIsRedirecting(false);
       const message = err instanceof Error ? err.message : 'Payment failed to initialize.';
       addToast(message, 'error');
     }
@@ -524,6 +525,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setIsRedirecting(true);
       window.location.href = checkout.invoice_url;
     } catch (err) {
+      setIsRedirecting(false);
       const message = err instanceof Error ? err.message : 'Tip payment failed to initialize.';
       addToast(message, 'error');
     }
