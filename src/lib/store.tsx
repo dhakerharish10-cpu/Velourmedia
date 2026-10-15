@@ -493,10 +493,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const session = await createWhopCheckout({ creatorId, contentId });
       window.location.href = session.invoice_url;
     } catch (err) {
+      console.error('[checkout] handlePayment createWhopCheckout failed', err);
       setIsRedirecting(false);
-      addToast(err instanceof Error ? err.message : 'Payment link not configured.', 'error');
+      const content = [...feed, ...myContent].find((c) => c.id === contentId);
+      if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
+        console.warn('[checkout] falling back to content.whop_url', content.whop_url);
+        window.location.href = content.whop_url;
+      } else if (content?.whop_product_id) {
+        const fallbackUrl = `https://whop.com/checkout/${content.whop_product_id}`;
+        console.warn('[checkout] falling back to whop_product_id', fallbackUrl);
+        window.location.href = fallbackUrl;
+      } else {
+        addToast(err instanceof Error ? err.message : 'Payment link not configured.', 'error');
+      }
     }
-  }, [addToast]);
+  }, [feed, myContent, addToast]);
 
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
@@ -508,10 +519,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const session = await createWhopCheckout({ creatorId, contentId, tipAmount });
       window.location.href = session.invoice_url;
     } catch (err) {
+      console.error('[checkout] handleTipPayment createWhopCheckout failed', err);
       setIsRedirecting(false);
-      addToast(err instanceof Error ? err.message : 'Payment link not configured.', 'error');
+      const content = [...feed, ...myContent].find((c) => c.id === contentId);
+      if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
+        console.warn('[checkout] falling back to content.whop_url', content.whop_url);
+        window.location.href = content.whop_url;
+      } else if (content?.whop_product_id) {
+        const fallbackUrl = `https://whop.com/checkout/${content.whop_product_id}`;
+        console.warn('[checkout] falling back to whop_product_id', fallbackUrl);
+        window.location.href = fallbackUrl;
+      } else {
+        addToast(err instanceof Error ? err.message : 'Payment link not configured.', 'error');
+      }
     }
-  }, [addToast]);
+  }, [feed, myContent, addToast]);
 
   const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';

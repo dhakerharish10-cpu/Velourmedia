@@ -163,9 +163,19 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       });
       window.location.href = session.invoice_url;
     } catch (err) {
+      console.error('[checkout] createWhopCheckout failed', err);
       setIsRedirecting(false);
       const message = err instanceof Error ? err.message : 'Payment link not configured.';
-      setEmailError(message);
+      if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
+        console.warn('[checkout] falling back to content.whop_url', content.whop_url);
+        window.location.href = content.whop_url;
+      } else if (content.whop_product_id) {
+        const fallbackUrl = `https://whop.com/checkout/${content.whop_product_id}`;
+        console.warn('[checkout] falling back to whop_product_id', fallbackUrl);
+        window.location.href = fallbackUrl;
+      } else {
+        setEmailError(message);
+      }
     }
   };
 
