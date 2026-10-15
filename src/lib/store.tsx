@@ -489,9 +489,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
     if (!content) return;
-    const checkout = content.whop_url
-      || (content.whop_product_id ? `https://whop.com/checkout/${content.whop_product_id}` : null)
-      || `https://whop.com/checkout?content_id=${content.id}&creator_id=${content.creator_id}`;
+    let checkout: string | null = null;
+    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
+      checkout = content.whop_url;
+    } else if (content.whop_product_id) {
+      checkout = `https://whop.com/checkout/${content.whop_product_id}`;
+    } else if (import.meta.env.VITE_WHOP_CHECKOUT_URL) {
+      checkout = import.meta.env.VITE_WHOP_CHECKOUT_URL;
+    }
+    if (!checkout) return;
     setIsRedirecting(true);
     window.location.href = checkout;
   }, [feed, myContent]);
@@ -503,9 +509,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, _amount: number) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
     if (!content) return;
-    const tipCheckout = content.whop_url
-      || (content.whop_product_id ? `https://whop.com/checkout/${content.whop_product_id}` : null)
-      || `https://whop.com/checkout?content_id=${content.id}&creator_id=${content.creator_id}`;
+    let tipCheckout: string | null = null;
+    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
+      tipCheckout = content.whop_url;
+    } else if (content.whop_product_id) {
+      tipCheckout = `https://whop.com/checkout/${content.whop_product_id}`;
+    } else if (import.meta.env.VITE_WHOP_CHECKOUT_URL) {
+      tipCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL;
+    }
+    if (!tipCheckout) return;
     setIsRedirecting(true);
     window.location.href = tipCheckout;
   }, [feed, myContent]);

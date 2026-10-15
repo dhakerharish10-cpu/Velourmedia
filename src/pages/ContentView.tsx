@@ -152,12 +152,17 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
 
     setEmailError(null);
-    if (content.whop_url) {
+    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
       window.location.href = content.whop_url;
     } else if (content.whop_product_id) {
       window.location.href = `https://whop.com/checkout/${content.whop_product_id}`;
     } else {
-      window.location.href = `https://whop.com/checkout?content_id=${content.id}&creator_id=${content.creator_id}`;
+      const fallback = import.meta.env.VITE_WHOP_CHECKOUT_URL;
+      if (fallback) {
+        window.location.href = fallback;
+      } else {
+        setEmailError('Checkout is not available for this content. Please contact the creator.');
+      }
     }
   };
 
