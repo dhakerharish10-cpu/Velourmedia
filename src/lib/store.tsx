@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { createWhopCheckout } from './whop';
 import type { Profile, Content, Purchase, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
 
 interface Toast {
@@ -486,41 +487,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [user, platformSettings, refreshPurchases, refreshFeed]);
 
-  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
-    const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    if (!content) return;
-    let checkout: string | null = null;
-    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      checkout = content.whop_url;
-    } else if (content.whop_product_id) {
-      checkout = `https://whop.com/checkout/${content.whop_product_id}`;
-    } else if (import.meta.env.VITE_WHOP_CHECKOUT_URL) {
-      checkout = import.meta.env.VITE_WHOP_CHECKOUT_URL;
-    }
-    if (!checkout) return;
+  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
     setIsRedirecting(true);
-    window.location.href = checkout;
-  }, [feed, myContent]);
+    try {
+      const session = await createWhopCheckout({ creatorId, contentId });
+      window.location.href = session.invoice_url;
+    } catch (err) {
+      setIsRedirecting(false);
+      addToast(err instanceof Error ? err.message : 'Payment link not configured.', 'error');
+    }
+  }, [addToast]);
 
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, _amount: number) => {
-    const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    if (!content) return;
-    let tipCheckout: string | null = null;
-    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      tipCheckout = content.whop_url;
-    } else if (content.whop_product_id) {
-      tipCheckout = `https://whop.com/checkout/${content.whop_product_id}`;
-    } else if (import.meta.env.VITE_WHOP_CHECKOUT_URL) {
-      tipCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL;
-    }
-    if (!tipCheckout) return;
+  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
     setIsRedirecting(true);
-    window.location.href = tipCheckout;
-  }, [feed, myContent]);
+    try {
+      const session = await createWhopCheckout({ creatorId, contentId, tipAmount });
+      window.location.href = session.invoice_url;
+    } catch (err) {
+      setIsRedirecting(false);
+      addToast(err instanceof Error ? err.message : 'Payment link not configured.', 'error');
+    }
+  }, [addToast]);
 
   const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { createWhopCheckout } from '../lib/whop';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
 import type { Content, ContentMedia } from '../lib/types';
@@ -135,7 +136,9 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-  const onPayToUnlock = () => {
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  const onPayToUnlock = async () => {
     if (!content) return;
 
     if (!user) {
@@ -152,17 +155,17 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
 
     setEmailError(null);
-    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      window.location.href = content.whop_url;
-    } else if (content.whop_product_id) {
-      window.location.href = `https://whop.com/checkout/${content.whop_product_id}`;
-    } else {
-      const fallback = import.meta.env.VITE_WHOP_CHECKOUT_URL;
-      if (fallback) {
-        window.location.href = fallback;
-      } else {
-        setEmailError('Checkout is not available for this content. Please contact the creator.');
-      }
+    setIsRedirecting(true);
+    try {
+      const session = await createWhopCheckout({
+        creatorId: content.creator_id,
+        contentId: content.id,
+      });
+      window.location.href = session.invoice_url;
+    } catch (err) {
+      setIsRedirecting(false);
+      const message = err instanceof Error ? err.message : 'Payment link not configured.';
+      setEmailError(message);
     }
   };
 
@@ -573,10 +576,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               {/* Unlock button — clean, full-width */}
               <button
                 onClick={onPayToUnlock}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98]"
+                disabled={isRedirecting}
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Lock size={18} />
-                Unlock for ${priceDisplay}
+                {isRedirecting ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
+                {isRedirecting ? 'Preparing checkout...' : `Unlock for ${priceDisplay}`}
               </button>
 
               {/* Tax subtext directly below button */}
