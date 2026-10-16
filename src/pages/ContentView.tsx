@@ -107,10 +107,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash.includes('payment=success') || hash.includes('payment-success=true')) {
+    if (hash.includes('payment=success') || hash.includes('payment-success=true') || hash.includes('payment_status=success')) {
       setGuestUnlocked(true);
       setJustPurchased(true);
-      const cleanHash = hash.replace(/[?&]payment-success=true/, '').replace(/[?&]payment=success/, '').replace(/\?$/, '');
+      const cleanHash = hash.replace(/[?&]payment-success=true/, '').replace(/[?&]payment=success/, '').replace(/[?&]payment_status=success/, '').replace(/\?$/, '');
       if (cleanHash !== hash) {
         window.history.replaceState(null, '', `#${cleanHash}`);
       }
@@ -120,7 +120,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   useEffect(() => {
     if (user) {
       refreshPurchases().then(() => {
-        if (window.location.hash.includes('payment=success') || window.location.hash.includes('payment-success=true') || sessionStorage.getItem('guest_email')) {
+        if (window.location.hash.includes('payment=success') || window.location.hash.includes('payment-success=true') || window.location.hash.includes('payment_status=success') || sessionStorage.getItem('guest_email')) {
           setJustPurchased(true);
         }
       });
@@ -144,33 +144,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const onPayToUnlock = async () => {
     if (!content) return;
 
-    if (!user) {
-      if (!guestEmail.trim()) {
-        setEmailError('Please enter your email address to receive your access link.');
-        return;
-      }
-      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
-      if (!emailOk) {
-        setEmailError('Please enter a valid email address.');
-        return;
-      }
+    if (!user && guestEmail.trim()) {
       sessionStorage.setItem('guest_email', guestEmail.trim());
     }
 
-    setEmailError(null);
     setIsRedirecting(true);
 
-    try {
-      const { invoice_url } = await createWhopCheckout({
-        creatorId: content.creator_id,
-        contentId: content.id,
-      });
-      window.location.href = invoice_url;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
-      addToast(message, 'error');
-      setIsRedirecting(false);
-    }
+    const { invoice_url } = await createWhopCheckout({
+      creatorId: content.creator_id,
+      contentId: content.id,
+      ...(guestEmail.trim() ? { guestEmail: guestEmail.trim() } : {}),
+    });
+    window.location.href = invoice_url;
   };
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';

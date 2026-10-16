@@ -58,6 +58,7 @@ export async function createWhopCheckout(payload: {
   creatorId: string;
   contentId?: string;
   tipAmount?: number;
+  guestEmail?: string;
 }): Promise<CheckoutResponse> {
   const { data: { session } } = await supabase.auth.getSession();
   const guestDeviceId = !session?.access_token ? getGuestDeviceId() : undefined;
@@ -67,6 +68,7 @@ export async function createWhopCheckout(payload: {
     ...(payload.contentId ? { kind: 'content', content_id: payload.contentId } : {}),
     ...(payload.tipAmount ? { kind: 'tip', tip_amount: payload.tipAmount } : {}),
     ...(guestDeviceId ? { guest_device_id: guestDeviceId } : {}),
+    ...(payload.guestEmail ? { guest_email: payload.guestEmail } : {}),
   });
   if (typeof result.order_id !== 'string' || typeof result.invoice_url !== 'string') {
     console.error('[whop] create-checkout returned an invalid response', result);

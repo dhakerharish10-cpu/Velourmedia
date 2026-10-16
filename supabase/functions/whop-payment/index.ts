@@ -311,6 +311,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   const contentId = typeof body.content_id === "string" ? body.content_id : null;
   const tipAmount = typeof body.tip_amount === "number" && body.tip_amount > 0 ? body.tip_amount : null;
   const guestDeviceId = typeof body.guest_device_id === "string" ? body.guest_device_id : null;
+  const guestEmail = typeof body.guest_email === "string" ? body.guest_email : null;
   if (!creatorId) return json({ error: "Creator is required." }, 400);
   if (!contentId) return json({ error: "Content is required." }, 400);
   if (checkoutType === "tip" && !tipAmount) return json({ error: "Tip amount is required." }, 400);
@@ -374,7 +375,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     ? `con_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`
     : `tip_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`;
 
-  const successUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}?payment-success=true`;
+  const successUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}?payment_status=success`;
   const cancelUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}`;
 
   // Fetch the content's whop_plan_id and whop_product_id — used for direct purchase_url fallbacks
@@ -403,6 +404,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       custom_creator_id: creatorId,
       buyer_id: user ? user.id : null,
       guest_device_id: guestDeviceId,
+      guest_email: guestEmail,
     },
     plan: {
       company_id: companyId,
