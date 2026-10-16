@@ -105,16 +105,20 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash.includes('payment=success')) {
+    if (hash.includes('payment=success') || hash.includes('payment-success=true')) {
       setGuestUnlocked(true);
       setJustPurchased(true);
+      const cleanHash = hash.replace(/[?&]payment-success=true/, '').replace(/[?&]payment=success/, '').replace(/\?$/, '');
+      if (cleanHash !== hash) {
+        window.history.replaceState(null, '', `#${cleanHash}`);
+      }
     }
   }, []);
 
   useEffect(() => {
     if (user) {
       refreshPurchases().then(() => {
-        if (window.location.hash.includes('payment=success') || sessionStorage.getItem('guest_email')) {
+        if (window.location.hash.includes('payment=success') || window.location.hash.includes('payment-success=true') || sessionStorage.getItem('guest_email')) {
           setJustPurchased(true);
         }
       });
@@ -156,16 +160,20 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     setEmailError(null);
     setIsRedirecting(true);
 
+    const returnUrl = `${window.location.origin}/#/u/${content.id}?payment-success=true`;
+
+    let baseCheckout: string;
     if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      window.location.href = content.whop_url;
-      return;
+      baseCheckout = content.whop_url;
+    } else if (content.whop_product_id) {
+      baseCheckout = `https://whop.com/checkout/${content.whop_product_id}`;
+    } else {
+      const globalFallback = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
+      baseCheckout = globalFallback;
     }
-    if (content.whop_product_id) {
-      window.location.href = `https://whop.com/checkout/${content.whop_product_id}`;
-      return;
-    }
-    setIsRedirecting(false);
-    alert('Please add a valid Whop URL or Product ID for this content in settings.');
+
+    const separator = baseCheckout.includes('?') ? '&' : '?';
+    window.location.href = `${baseCheckout}${separator}redirect_url=${encodeURIComponent(returnUrl)}`;
   };
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
