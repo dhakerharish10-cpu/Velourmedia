@@ -24,7 +24,7 @@ interface ContentViewProps {
 }
 
 export function ContentView({ contentId, onNavigate }: ContentViewProps) {
-  const { user, isUnlocked, handleTipPayment, openAuth, refreshPurchases } = useStore();
+  const { user, isUnlocked, handleTipPayment, openAuth, refreshPurchases, addToast } = useStore();
   const [content, setContent] = useState<Content | null>(null);
   const [mediaItems, setMediaItems] = useState<ContentMedia[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,8 +139,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
   const onPayToUnlock = () => {
     if (!content) return;
 
@@ -158,19 +156,12 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
 
     setEmailError(null);
-    setIsRedirecting(true);
 
-    const returnUrl = `${window.location.origin}/#/u/${content.id}?payment-success=true`;
-
-    let baseCheckout: string;
     if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      baseCheckout = content.whop_url;
+      window.open(content.whop_url, '_blank', 'noopener,noreferrer');
     } else {
-      baseCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
+      addToast('Purchase link not available for this content. Please contact the creator.', 'error');
     }
-
-    const separator = baseCheckout.includes('?') ? '&' : '?';
-    window.location.href = `${baseCheckout}${separator}redirect_url=${encodeURIComponent(returnUrl)}`;
   };
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
@@ -580,11 +571,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               {/* Unlock button — clean, full-width */}
               <button
                 onClick={onPayToUnlock}
-                disabled={isRedirecting}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98]"
               >
-                {isRedirecting ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                {isRedirecting ? 'Preparing checkout...' : `Unlock for ${priceDisplay}`}
+                <Lock size={18} />
+                {`Unlock for ${priceDisplay}`}
               </button>
 
               {/* Tax subtext directly below button */}

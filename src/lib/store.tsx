@@ -486,37 +486,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [user, platformSettings, refreshPurchases, refreshFeed]);
 
-  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
-    setIsRedirecting(true);
-    const returnUrl = `${window.location.origin}/#/u/${contentId}?payment-success=true`;
+  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    let baseCheckout: string;
     if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      baseCheckout = content.whop_url;
+      window.open(content.whop_url, '_blank', 'noopener,noreferrer');
     } else {
-      baseCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
+      addToast('Purchase link not available for this content.', 'error');
     }
-    const separator = baseCheckout.includes('?') ? '&' : '?';
-    window.location.href = `${baseCheckout}${separator}redirect_url=${encodeURIComponent(returnUrl)}`;
-  }, [feed, myContent]);
+  }, [feed, myContent, addToast]);
 
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
-    setIsRedirecting(true);
-    const returnUrl = `${window.location.origin}/#/u/${contentId}?payment-success=true`;
+  const handleTipPayment = useCallback(async (_creatorId: string, contentId: string, _tipAmount: number) => {
     const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    let baseCheckout: string;
     if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      baseCheckout = content.whop_url;
+      window.open(content.whop_url, '_blank', 'noopener,noreferrer');
     } else {
-      baseCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
+      addToast('Tip link not available for this content.', 'error');
     }
-    const separator = baseCheckout.includes('?') ? '&' : '?';
-    window.location.href = `${baseCheckout}${separator}redirect_url=${encodeURIComponent(returnUrl)}`;
-  }, [feed, myContent]);
+  }, [feed, myContent, addToast]);
 
   const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';
