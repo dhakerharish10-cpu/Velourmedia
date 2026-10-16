@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { createWhopCheckout } from './whop';
 import type { Profile, Content, Purchase, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
 
 interface Toast {
@@ -486,27 +487,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [user, platformSettings, refreshPurchases, refreshFeed]);
 
-  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
-    const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      window.open(content.whop_url, '_blank', 'noopener,noreferrer');
-    } else {
-      addToast('Purchase link not available for this content.', 'error');
+  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
+    setIsRedirecting(true);
+    try {
+      const { invoice_url } = await createWhopCheckout({ creatorId, contentId });
+      window.location.href = invoice_url;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
+      addToast(message, 'error');
+      setIsRedirecting(false);
     }
-  }, [feed, myContent, addToast]);
+  }, [addToast]);
 
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  const handleTipPayment = useCallback(async (_creatorId: string, contentId: string, _tipAmount: number) => {
-    const content = [...feed, ...myContent].find((c) => c.id === contentId);
-    if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      window.open(content.whop_url, '_blank', 'noopener,noreferrer');
-    } else {
-      addToast('Tip link not available for this content.', 'error');
+  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
+    setIsRedirecting(true);
+    try {
+      const { invoice_url } = await createWhopCheckout({ creatorId, contentId, tipAmount });
+      window.location.href = invoice_url;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
+      addToast(message, 'error');
+      setIsRedirecting(false);
     }
-  }, [feed, myContent, addToast]);
+  }, [addToast]);
 
   const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';

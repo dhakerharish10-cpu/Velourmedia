@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { createWhopCheckout } from '../lib/whop';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
 import type { Content, ContentMedia } from '../lib/types';
@@ -33,6 +34,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const [guestEmail, setGuestEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [justPurchased, setJustPurchased] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const isOwned = isUnlocked(contentId);
   const isFree = content?.price === 0;
@@ -139,7 +141,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-  const onPayToUnlock = () => {
+  const onPayToUnlock = async () => {
     if (!content) return;
 
     if (!user) {
@@ -156,11 +158,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
 
     setEmailError(null);
+    setIsRedirecting(true);
 
-    if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
-      window.open(content.whop_url, '_blank', 'noopener,noreferrer');
-    } else {
-      addToast('Purchase link not available for this content. Please contact the creator.', 'error');
+    try {
+      const { invoice_url } = await createWhopCheckout({
+        creatorId: content.creator_id,
+        contentId: content.id,
+      });
+      window.location.href = invoice_url;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
+      addToast(message, 'error');
+      setIsRedirecting(false);
     }
   };
 
@@ -571,10 +580,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               {/* Unlock button — clean, full-width */}
               <button
                 onClick={onPayToUnlock}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98]"
+                disabled={isRedirecting}
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Lock size={18} />
-                {`Unlock for ${priceDisplay}`}
+                {isRedirecting ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
+                {isRedirecting ? 'Preparing checkout...' : `Unlock for ${priceDisplay}`}
               </button>
 
               {/* Tax subtext directly below button */}

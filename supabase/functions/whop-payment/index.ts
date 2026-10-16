@@ -374,7 +374,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     ? `con_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`
     : `tip_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`;
 
-  const successUrl = `${appUrl}/#/payment/success?order_id=${encodeURIComponent(orderId)}`;
+  const successUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}?payment-success=true`;
   const cancelUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}`;
 
   // Fetch the content's whop_plan_id and whop_product_id — used for direct purchase_url fallbacks
