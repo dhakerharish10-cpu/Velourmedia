@@ -493,8 +493,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let baseCheckout: string;
     if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
       baseCheckout = content.whop_url;
-    } else if (content?.whop_product_id) {
-      baseCheckout = `https://whop.com/checkout/${content.whop_product_id}`;
     } else {
       baseCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
     }
@@ -513,8 +511,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let baseCheckout: string;
     if (content?.whop_url && /^https?:\/\//.test(content.whop_url)) {
       baseCheckout = content.whop_url;
-    } else if (content?.whop_product_id) {
-      baseCheckout = `https://whop.com/checkout/${content.whop_product_id}`;
     } else {
       baseCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
     }

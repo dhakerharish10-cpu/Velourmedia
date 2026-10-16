@@ -165,11 +165,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     let baseCheckout: string;
     if (content.whop_url && /^https?:\/\//.test(content.whop_url)) {
       baseCheckout = content.whop_url;
-    } else if (content.whop_product_id) {
-      baseCheckout = `https://whop.com/checkout/${content.whop_product_id}`;
     } else {
-      const globalFallback = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
-      baseCheckout = globalFallback;
+      baseCheckout = import.meta.env.VITE_WHOP_CHECKOUT_URL || 'https://whop.com/checkout';
     }
 
     const separator = baseCheckout.includes('?') ? '&' : '?';
