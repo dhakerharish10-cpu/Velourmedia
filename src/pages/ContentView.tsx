@@ -141,22 +141,51 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-  const onPayToUnlock = async () => {
-    if (!content) return;
-
-    if (!user && guestEmail.trim()) {
+    const onPayToUnlock = async () => {
+    if (guestEmail.trim()) {
       sessionStorage.setItem('guest_email', guestEmail.trim());
     }
 
     setIsRedirecting(true);
 
-    const { invoice_url } = await createWhopCheckout({
-      creatorId: content.creator_id,
-      contentId: content.id,
-      ...(guestEmail.trim() ? { guestEmail: guestEmail.trim() } : {}),
-    });
-    window.location.href = invoice_url;
+    // Safety Timeout: Agar 3 second me response na aaye, toh direct Whop link khol do
+    const timeoutId = setTimeout(() => {
+      setIsRedirecting(false);
+      if ((content as any)?.whop_url) {
+        window.location.href = (content as any).whop_url;
+      }
+    }, 3000);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('whop-payment', {
+        body: { 
+          contentId: content.id, 
+          creatorId: content.creator_id,
+          guestEmail: guestEmail.trim() || null 
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      const invoice_url = data?.checkoutUrl || data?.invoiceUrl;
+      if (invoice_url) {
+        window.location.href = invoice_url;
+        return;
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error('Edge function error:', err);
+    }
+
+    // Fallback: Agar Edge function fail ho ya response na de, toh direct whop link khol do
+    setIsRedirecting(false);
+    if ((content as any)?.whop_url) {
+      window.location.href = (content as any).whop_url;
+    } else {
+      alert("Checkout link is not available right now.");
+    }
   };
+  
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
 
