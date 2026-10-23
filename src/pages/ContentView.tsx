@@ -106,27 +106,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   }, [contentId, fetchMedia, user]);
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.includes('payment=success') || hash.includes('payment-success=true') || hash.includes('payment_status=success')) {
-      setGuestUnlocked(true);
-      setJustPurchased(true);
-      const cleanHash = hash.replace(/[?&]payment-success=true/, '').replace(/[?&]payment=success/, '').replace(/[?&]payment_status=success/, '').replace(/\?$/, '');
-      if (cleanHash !== hash) {
-        window.history.replaceState(null, '', `#${cleanHash}`);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      refreshPurchases().then(() => {
-        if (window.location.hash.includes('payment=success') || window.location.hash.includes('payment-success=true') || window.location.hash.includes('payment_status=success') || sessionStorage.getItem('guest_email')) {
-          setJustPurchased(true);
-        }
-      });
-    }
-  }, [user, refreshPurchases]);
-
+  if (user) {
+    refreshPurchases();
+  }
+}, [user, refreshPurchases]);
+  
   const allMedia = mediaItems.length > 0
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
     : content ? [{ url: content.media_url, type: content.media_type }] : [];
@@ -141,50 +125,24 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-    const onPayToUnlock = async () => {
+      const onPayToUnlock = async () => {
+    if (!content) return;
     if (guestEmail.trim()) {
       sessionStorage.setItem('guest_email', guestEmail.trim());
     }
-
     setIsRedirecting(true);
-
-    // Safety Timeout: Agar 3 second me response na aaye, toh direct Whop link khol do
-    const timeoutId = setTimeout(() => {
-      setIsRedirecting(false);
-      if ((content as any)?.whop_url) {
-        window.location.href = (content as any).whop_url;
-      }
-    }, 3000);
-
     try {
-      const { data, error } = await supabase.functions.invoke('whop-payment', {
-        body: { 
-          contentId: content.id, 
-          creatorId: content.creator_id,
-          guestEmail: guestEmail.trim() || null 
-        },
-      });
-
-      clearTimeout(timeoutId);
-
-      const invoice_url = data?.checkoutUrl || data?.invoiceUrl;
-      if (invoice_url) {
-        window.location.href = invoice_url;
-        return;
-      }
+      await handlePayment(content.id, content.creator_id);
     } catch (err) {
-      clearTimeout(timeoutId);
-      console.error('Edge function error:', err);
-    }
-
-    // Fallback: Agar Edge function fail ho ya response na de, toh direct whop link khol do
-    setIsRedirecting(false);
-    if ((content as any)?.whop_url) {
-      window.location.href = (content as any).whop_url;
-    } else {
-      alert("Checkout link is not available right now.");
+      console.error(err);
+      setIsRedirecting(false);
+      addToast(
+        err instanceof Error ? err.message : 'Unable to start checkout. Please try again.',
+        'error'
+      );
     }
   };
+  
   
 
   const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
