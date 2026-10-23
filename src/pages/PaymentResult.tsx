@@ -203,7 +203,8 @@ export function PaymentResult({ onNavigate }: PaymentResultProps) {
           </button>
         )}
         <div className="mt-6 pt-5 border-t border-zinc-100 text-[11px] text-slate-500 dark:text-zinc-400">
-          Payments securely processed by Whop
+          Payment confirmation is verified on the server
+          
         </div>
       </div>
     </div>
