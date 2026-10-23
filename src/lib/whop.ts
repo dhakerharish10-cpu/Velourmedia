@@ -5,13 +5,24 @@ const SUPABASE_ANON_KEY = supabaseAnonKey;
 
 const GUEST_DEVICE_KEY = 'velour_guest_device_id';
 
+/**
+ * Stable anonymous device id for guest checkout.
+ * - Stored only in localStorage (never a secret).
+ * - Generated once per browser and reused.
+ * - Safe to send to the server as a correlation id for guest purchases.
+ */
 export function getGuestDeviceId(): string {
-  let id = localStorage.getItem(GUEST_DEVICE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(GUEST_DEVICE_KEY, id);
+  try {
+    let id = localStorage.getItem(GUEST_DEVICE_KEY);
+    if (!id || id.length < 8) {
+      id = crypto.randomUUID();
+      localStorage.setItem(GUEST_DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    // localStorage blocked (private mode / iframe) – session-only fallback
+    return `tmp_${crypto.randomUUID()}`;
   }
-  return id;
 }
 
 interface CheckoutResponse {
@@ -27,7 +38,7 @@ export interface PaymentStatus {
   content_id?: string | null;
 }
 
-async function callWhop(route: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function callPaymentApi(route: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Payment service is not configured.');
   const { data: { session } } = await supabase.auth.getSession();
 
@@ -43,17 +54,22 @@ async function callWhop(route: string, payload: Record<string, unknown>): Promis
       body: JSON.stringify(payload),
     });
   } catch {
-    throw new Error('Could not connect to Whop checkout. Please check your connection and try again.');
+    throw new Error('Could not connect to checkout. Please check your connection and try again.');
   }
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
     const message = typeof body.error === 'string' ? body.error : `Payment request failed (${response.status}).`;
-    console.error(`[whop] ${route} failed`, { status: response.status, body });
+    console.error(`[payment] ${route} failed`, { status: response.status, body });
     throw new Error(message);
   }
   return body;
 }
 
+/**
+ * Create a one-time checkout for a content item.
+ * Currently routes through the existing Edge Function; will be switched
+ * to an authorized provider in Phase B without changing call sites.
+ */
 export async function createWhopCheckout(payload: {
   creatorId: string;
   contentId?: string;
@@ -63,7 +79,7 @@ export async function createWhopCheckout(payload: {
   const { data: { session } } = await supabase.auth.getSession();
   const guestDeviceId = !session?.access_token ? getGuestDeviceId() : undefined;
 
-  const result = await callWhop('create-checkout', {
+  const result = await callPaymentApi('create-checkout', {
     creator_id: payload.creatorId,
     ...(payload.contentId ? { kind: 'content', content_id: payload.contentId } : {}),
     ...(payload.tipAmount ? { kind: 'tip', tip_amount: payload.tipAmount } : {}),
@@ -71,11 +87,12 @@ export async function createWhopCheckout(payload: {
     ...(payload.guestEmail ? { guest_email: payload.guestEmail } : {}),
   });
   if (typeof result.order_id !== 'string' || typeof result.invoice_url !== 'string') {
-    console.error('[whop] create-checkout returned an invalid response', result);
+    console.error('[payment] create-checkout returned an invalid response', result);
     throw new Error(typeof result.error === 'string' ? result.error : 'The payment checkout could not be created.');
   }
-  if (!/^https:\/\/whop\.com/.test(result.invoice_url)) {
-    console.error('[whop] create-checkout returned a non-whop URL', result.invoice_url);
+  // Accept any https checkout URL (provider-agnostic for Phase B)
+  if (!result.invoice_url.startsWith('https://')) {
+    console.error('[payment] create-checkout returned an invalid URL', result.invoice_url);
     throw new Error('The payment checkout returned an invalid URL. Please try again.');
   }
   return {
@@ -89,7 +106,7 @@ export async function getWhopStatus(orderId: string): Promise<PaymentStatus> {
   const { data: { session } } = await supabase.auth.getSession();
   const guestDeviceId = !session?.access_token ? getGuestDeviceId() : undefined;
 
-  const result = await callWhop('status', {
+  const result = await callPaymentApi('status', {
     order_id: orderId,
     ...(guestDeviceId ? { guest_device_id: guestDeviceId } : {}),
   });
@@ -121,7 +138,7 @@ export async function confirmPaymentFallback(orderId: string): Promise<PaymentSt
   });
   const result = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
-    console.error('[whop] confirm-payment failed', { status: response.status, result });
+    console.error('[payment] confirm-payment failed', { status: response.status, result });
     throw new Error(typeof result.error === 'string' ? result.error : 'Payment confirmation failed.');
   }
   if (typeof result.order_id !== 'string' || typeof result.status !== 'string') {
@@ -143,7 +160,7 @@ export interface SyncResult {
 }
 
 export async function syncWhopPayments(): Promise<SyncResult> {
-  const result = await callWhop('sync-whop-payments', {});
+  const result = await callPaymentApi('sync-whop-payments', {});
   return {
     synced: typeof result.synced === 'number' ? result.synced : 0,
     historical: typeof result.historical === 'number' ? result.historical : 0,
