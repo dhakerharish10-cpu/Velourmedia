@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 import type { Content } from '../lib/types';
 import { useStore } from '../lib/store';
 import { ImageIcon, Video, Lock, Layers } from 'lucide-react';
@@ -12,7 +14,32 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
   const isOwned = isUnlocked(content.id);
   const isFree = content.price === 0;
   const isLocked = !isFree && !isOwned;
+  const [paying, setPaying] = useState(false);
 
+  const handlePayment = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPaying(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Please log in to purchase exclusive content.');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { content_id: content.id },
+      });
+
+      if (error || !data?.url) throw error ?? new Error('No checkout URL received');
+      window.location.href = data.url;
+    } catch (err) {
+      console.error(err);
+      alert('Could not start checkout. Please try again.');
+    } finally {
+      setPaying(false);
+    }
+  };
+  
   return (
     <button
       onClick={() => onNavigate(`/u/${content.id}`)}
@@ -39,9 +66,15 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
             <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
               <Lock size={18} className="text-white" />
             </div>
-            <div className="px-3 py-1.5 rounded-lg bg-gradient-brand text-white text-sm font-semibold shadow-lg">
-              Unlock Now for ${Number(content.price).toFixed(2)}
-            </div>
+            <button
+  type="button"
+  onClick={handlePayment}
+  disabled={paying}
+            className="px-3 py-1.5 rounded-lg bg-gradient-brand text-white text-xs font-semibold shadow-lg hover:opacity-90 disabled:opacity-50">
+  {paying ? 'Starting...' : `Unlock Now for $${Number(content.price).toFixed(2)}`}
+</button>
+            
+            
           </div>
         )}
 
