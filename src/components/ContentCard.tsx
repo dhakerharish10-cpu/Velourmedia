@@ -12,12 +12,19 @@ interface ContentCardProps {
 export function ContentCard({ content, onNavigate }: ContentCardProps) {
   const { isUnlocked } = useStore();
   const isOwned = isUnlocked(content.id);
-  const isFree = content.price === 0;
+  const price = Number(content.price ?? 0);
+  const isFree = price <= 0;
   const isLocked = !isFree && !isOwned;
   const [paying, setPaying] = useState(false);
 
+  // While locked, never use the real media as a preview
+  const previewSrc = isLocked
+    ? content.thumbnail_url
+    : content.thumbnail_url || content.media_url;
+
   const handlePayment = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (paying) return;
     setPaying(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -25,11 +32,9 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
         alert('Please log in to purchase exclusive content.');
         return;
       }
-
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { content_id: content.id },
       });
-
       if (error || !data?.url) throw error ?? new Error('No checkout URL received');
       window.location.href = data.url;
     } catch (err) {
@@ -39,22 +44,30 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
       setPaying(false);
     }
   };
-  
+
+  const open = () => onNavigate(`/u/${content.id}`);
+
   return (
-    <button
-      onClick={() => onNavigate(`/u/${content.id}`)}
-      className="group relative rounded-xl overflow-hidden bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-all text-left"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+      className="group relative cursor-pointer rounded-xl overflow-hidden bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-all text-left"
     >
       <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-black/40 relative">
-        <img
-          src={content.thumbnail_url || content.media_url}
-          alt={content.title}
-          loading="lazy"
-          className={`w-full h-full object-cover transition-transform duration-300 ${
-            isLocked ? 'scale-110 brightness-50' : 'group-hover:scale-105'
-          }`}
-          style={isLocked ? { filter: `blur(${((content.blur_percent ?? 60) / 100) * 24}px) brightness(0.5)` } : undefined}
-        />
+        {previewSrc ? (
+          <img
+            src={previewSrc}
+            alt={content.title}
+            loading="lazy"
+            className={`w-full h-full object-cover transition-transform duration-300 ${
+              isLocked ? 'scale-110 brightness-50' : 'group-hover:scale-105'
+            }`}
+            style={isLocked ? { filter: `blur(${((content.blur_percent ?? 60) / 100) * 24}px) brightness(0.5)` } : undefined}
+          />
+        ) : null}
+
         {content.media_type === 'video' && !content.thumbnail_url && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-200 dark:bg-zinc-800">
             <Video size={32} className="text-slate-400 dark:text-zinc-600" />
@@ -67,14 +80,13 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
               <Lock size={18} className="text-white" />
             </div>
             <button
-  type="button"
-  onClick={handlePayment}
-  disabled={paying}
-            className="px-3 py-1.5 rounded-lg bg-gradient-brand text-white text-xs font-semibold shadow-lg hover:opacity-90 disabled:opacity-50">
-  {paying ? 'Starting...' : `Unlock Now for $${Number(content.price).toFixed(2)}`}
-</button>
-            
-            
+              type="button"
+              onClick={handlePayment}
+              disabled={paying}
+              className="px-3 py-1.5 rounded-lg bg-gradient-brand text-white text-xs font-semibold shadow-lg hover:opacity-90 disabled:opacity-50"
+            >
+              {paying ? 'Starting...' : `Unlock Now for $${price.toFixed(2)}`}
+            </button>
           </div>
         )}
 
@@ -93,7 +105,9 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
         </p>
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-1 text-xs">
-            {content.media_type === 'image' ? <ImageIcon size={12} className="text-slate-400 dark:text-zinc-500" /> : <Video size={12} className="text-slate-400 dark:text-zinc-500" />}
+            {content.media_type === 'image'
+              ? <ImageIcon size={12} className="text-slate-400 dark:text-zinc-500" />
+              : <Video size={12} className="text-slate-400 dark:text-zinc-500" />}
             <span className="text-slate-400 dark:text-zinc-500 capitalize">{content.media_type}</span>
           </div>
           <div className="flex items-center gap-1 text-sm font-semibold">
@@ -101,15 +115,14 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
               <span className="text-emerald-600 dark:text-emerald-400">Free</span>
             ) : isOwned ? (
               <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <Lock size={12} />
-                Unlocked
+                <Lock size={12} /> Unlocked
               </span>
             ) : (
-              <span className="text-indigo-600 dark:text-indigo-400">${Number(content.price).toFixed(2)}</span>
+              <span className="text-indigo-600 dark:text-indigo-400">${price.toFixed(2)}</span>
             )}
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
