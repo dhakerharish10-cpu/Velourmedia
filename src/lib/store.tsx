@@ -97,6 +97,20 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
+// content.creator_id has no foreign key to profiles, so creators are loaded separately
+async function loadCreators(ids: Array<string | null | undefined>): Promise<Map<string, Profile>> {
+  const unique = Array.from(new Set(ids.filter((id): id is string => !!id)));
+  const map = new Map<string, Profile>();
+  if (unique.length === 0) return map;
+  const { data, error } = await supabase.from('profiles').select('*').in('id', unique);
+  if (error) {
+    console.error('Failed to load creators:', error.message);
+    return map;
+  }
+  (data || []).forEach((p) => map.set(p.id as string, p as Profile));
+  return map;
+}
+
 export function useStore() {
   const ctx = useContext(StoreContext);
   if (!ctx) throw new Error('useStore must be used within StoreProvider');
@@ -201,7 +215,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshFeed = useCallback(async () => {
     const { data, error } = await supabase
       .from('content')
-      .select('*, creator:profiles(*)')
+      .select('*')
       .eq('is_published', true)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -209,7 +223,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       console.error('Failed to load feed:', error.message);
       return;
     }
-    setFeed(data || []);
+    const rows = data || [];
+    const creators = await loadCreators(rows.map((c) => c.creator_id));
+    setFeed(rows.map((c) => ({ ...c, creator: creators.get(c.creator_id) })) as unknown as Content[]);
   }, []);
 
   const refreshPurchases = useCallback(async () => {
@@ -219,14 +235,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const { data, error } = await supabase
       .from('purchases')
-      .select('*, content:content(*, creator:profiles(*))')
+      .select('*, content:content(*)')
       .eq('buyer_id', user.id)
       .order('created_at', { ascending: false });
     if (error) {
       console.error('Failed to load purchases:', error.message);
       return;
     }
-    setMyPurchases(data || []);
+    const rows = data || [];
+    const creators = await loadCreators(rows.map((p) => p.content?.creator_id));
+    setMyPurchases(
+      rows.map((p) =>
+        p.content ? { ...p, content: { ...p.content, creator: creators.get(p.content.creator_id) } } : p
+      ) as unknown as Purchase[]
+    );
   }, [user]);
 
   const refreshEarnings = useCallback(async () => {
@@ -487,11 +509,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, [user, platformSettings, refreshPurchases, refreshFeed]);
 
-  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
+  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     setIsRedirecting(true);
     try {
-      const { invoice_url } = await createWhopCheckout({ creatorId, contentId });
-      window.location.href = invoice_url;
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { content_id: contentId },
+      });
+      if (error || !data?.url) throw new Error('Unable to start checkout. Please try again.');
+      window.location.href = data.url;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
       addToast(message, 'error');
@@ -780,9 +805,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     handleTipPayment,
     getProfileLink,
     deleteContent,
-  togglePrivate,
-  togglePublished,
-  duplicateContent,
+    togglePrivate,
+    togglePublished,
+    duplicateContent,
     updateContent,
     addMediaToContent,
     removeMediaFromContent,
