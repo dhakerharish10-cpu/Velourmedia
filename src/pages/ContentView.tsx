@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
-import { createWhopCheckout } from '../lib/whop';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
 import type { Content, ContentMedia } from '../lib/types';
 import {
   ArrowLeft, Lock, Check, Loader2, ImageIcon, Video,
-  ChevronLeft, ChevronRight, BadgeCheck, Mail, ArrowRight, Heart,
-  ShieldCheck, Shield, Zap, FileText, Flag, Info,
+  ChevronLeft, ChevronRight, BadgeCheck, ArrowRight, Heart,
+  Shield, Zap, Info,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 50;
@@ -30,15 +29,16 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const [mediaItems, setMediaItems] = useState<ContentMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [guestUnlocked, setGuestUnlocked] = useState(false);
-  const [guestEmail, setGuestEmail] = useState('');
-  const [emailError, setEmailError] = useState<string | null>(null);
   const [justPurchased, setJustPurchased] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const isOwned = isUnlocked(contentId);
-  const isFree = content?.price === 0;
-  const hasAccess = isOwned || isFree || guestUnlocked;
+  const isFree = content ? Number(content.price) <= 0 : false;
+  const hasAccess = isOwned || isFree;
+
+  // Whop sends the buyer back here with ?paid=1 after checkout
+  const returnedFromCheckout =
+    typeof window !== 'undefined' && window.location.href.includes('paid=1');
 
   const fetchMedia = useCallback(async (contentId: string) => {
     const { data } = await supabase
@@ -106,11 +106,27 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   }, [contentId, fetchMedia, user]);
 
   useEffect(() => {
-  if (user) {
-    refreshPurchases();
-  }
-}, [user, refreshPurchases]);
-  
+    if (user) {
+      refreshPurchases();
+    }
+  }, [user, refreshPurchases]);
+
+  // The webhook writes the purchase a few seconds after payment, so re-check for ~30s
+  useEffect(() => {
+    if (!user || isOwned || !returnedFromCheckout) return;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries += 1;
+      await refreshPurchases();
+      if (tries >= 15) clearInterval(timer);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [user, isOwned, returnedFromCheckout, refreshPurchases]);
+
+  useEffect(() => {
+    if (isOwned && returnedFromCheckout) setJustPurchased(true);
+  }, [isOwned, returnedFromCheckout]);
+
   const allMedia = mediaItems.length > 0
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
     : content ? [{ url: content.media_url, type: content.media_type }] : [];
@@ -125,14 +141,22 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if (Math.abs(dx) > SWIPE_THRESHOLD) { dx < 0 ? goNext() : goPrev(); }
   };
 
-      const onPayToUnlock = async () => {
-    if (!content) return;
-    if (guestEmail.trim()) {
-      sessionStorage.setItem('guest_email', guestEmail.trim());
+  const onPayToUnlock = async () => {
+    if (!content || isRedirecting) return;
+    if (!user) {
+      addToast('Please log in to unlock this content.', 'error');
+      openAuth('signin');
+      return;
     }
     setIsRedirecting(true);
     try {
-      await handlePayment(content.id, content.creator_id);
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { content_id: content.id },
+      });
+      if (error || !data?.url) {
+        throw new Error('Unable to start checkout. Please try again.');
+      }
+      window.location.href = data.url;
     } catch (err) {
       console.error(err);
       setIsRedirecting(false);
@@ -142,10 +166,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       );
     }
   };
-  
-  
 
-  const priceDisplay = content ? `${Number(content.price).toFixed(2)}` : '$0.00';
+  const priceDisplay = content ? Number(content.price).toFixed(2) : '0.00';
 
   const blurPx = ((content?.blur_percent ?? 60) / 100) * 24;
   const blurStyle = { filter: `blur(${blurPx}px)` };
@@ -323,7 +345,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
           <div className="space-y-4">
             {/* 1. Bright 3D Stacked Card Preview */}
             <div className="relative pb-3" style={{ perspective: '1200px' }}>
-              {/* Staggered 3D backdrop cards — layered, subtle shadows, clean borders */}
               {allMedia.length > 1 && (
                 <>
                   <div
@@ -351,12 +372,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </>
               )}
 
-              {/* Main preview card — bright, clean, rounded border */}
+              {/* Main preview card */}
               <div
                 className="relative rounded-[24px] overflow-hidden bg-zinc-900 border-2 border-white/15 shadow-2xl shadow-black/40 transition-transform duration-300 hover:scale-[1.005]"
                 style={{ transformStyle: 'preserve-3d' }}
               >
-                {/* Blurred media preview — bright, natural, no dark tint */}
                 <div
                   className="relative aspect-[4/5] sm:aspect-[4/3] select-none"
                   onContextMenu={(e) => e.preventDefault()}
@@ -390,10 +410,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </div>
                   ))}
 
-                  {/* Subtle bottom-to-top fade only — keeps previews bright */}
                   <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                  {/* Carousel nav arrows */}
                   {allMedia.length > 1 && (
                     <>
                       <button
@@ -413,7 +431,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </>
                   )}
 
-                  {/* Image counter badge — top right */}
                   {allMedia.length > 1 && (
                     <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs text-white font-medium z-10 border border-white/20">
                       {content.media_type === 'image' ? <ImageIcon size={11} /> : <Video size={11} />}
@@ -421,15 +438,12 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </div>
                   )}
 
-                  {/* Lock badge — top left, minimal */}
                   <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs text-white font-medium z-10 border border-white/20">
                     <Lock size={11} />
                     Locked
                   </div>
 
-                  {/* Bottom overlay: price + email + thumbnails — unified checkout zone */}
                   <div className="absolute inset-x-0 bottom-0 z-10 px-5 pb-4 pt-12 flex flex-col items-center gap-3">
-                    {/* Price */}
                     <div className="flex flex-col items-center gap-1">
                       <p className="text-3xl font-extrabold text-white tracking-tight drop-shadow-lg">
                         ${priceDisplay}
@@ -437,7 +451,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                       <p className="text-[11px] font-medium text-white/60 uppercase tracking-wider">One-time USD</p>
                     </div>
 
-                    {/* Thumbnail row — neat, bottom center */}
                     {allMedia.length > 1 && (
                       <div className="flex items-center gap-2">
                         {allMedia.map((m, i) => (
@@ -469,7 +482,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
             {/* 2. Creator & Post Information */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
-              {/* Creator row */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
@@ -503,10 +515,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </button>
               </div>
 
-              {/* Divider */}
               <div className="my-3.5 border-t border-zinc-800/60" />
 
-              {/* Tags */}
               <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                 {content.media_count > 1 && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[11px] font-semibold text-indigo-400">
@@ -516,55 +526,28 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 )}
               </div>
 
-              {/* Title */}
               <h1 className="text-xl font-bold text-white leading-snug">{content.title}</h1>
 
-              {/* Description */}
               {content.description && (
                 <p className="text-sm text-zinc-400 mt-2 leading-relaxed">{content.description}</p>
               )}
             </div>
 
-            {/* 3. Checkout — email + unlock button in one cohesive block */}
+            {/* 3. Checkout — unlock button */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
-              {/* Email input (guests only) — integrated seamlessly */}
-              {!user && (
-                <div className="mb-3.5">
-                  <div className="relative">
-                    <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
-                    <input
-                      type="email"
-                      value={guestEmail}
-                      onChange={(e) => {
-                        setGuestEmail(e.target.value);
-                        if (emailError) setEmailError(null);
-                      }}
-                      placeholder="Enter your email to unlock"
-                      className="w-full rounded-xl bg-[#0B0B0F] border border-zinc-800 pl-11 pr-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
-                    />
-                  </div>
-                  {emailError && (
-                    <p className="text-xs text-rose-400 mt-2">{emailError}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Unlock button — clean, full-width */}
               <button
                 onClick={onPayToUnlock}
                 disabled={isRedirecting}
                 className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isRedirecting ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                {isRedirecting ? 'Preparing checkout...' : `Unlock for ${priceDisplay}`}
+                {isRedirecting ? 'Preparing checkout...' : user ? `Unlock for $${priceDisplay}` : `Log in to unlock for $${priceDisplay}`}
               </button>
 
-              {/* Tax subtext directly below button */}
               <p className="text-center text-[11px] text-zinc-600 mt-2.5">
                 Tax calculated next step
               </p>
 
-              {/* Security disclaimer box */}
               <div className="mt-3.5 rounded-xl bg-[#0B0B0F] border border-zinc-800/80 px-4 py-3 flex items-start gap-2.5">
                 <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
                 <p className="text-[11px] leading-relaxed text-zinc-500">
@@ -572,7 +555,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </p>
               </div>
 
-              {/* Trust badges */}
               <div className="flex items-center justify-center gap-6 mt-4">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                   <Shield size={14} className="text-indigo-400" />
@@ -583,10 +565,9 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                   Instant access
                 </div>
               </div>
-
             </div>
 
-            {/* 4. Compact footer legal links — very bottom, subtle */}
+            {/* 4. Compact footer legal links */}
             <div className="text-center pt-3 pb-8 space-y-2">
               <p className="text-[11px] text-zinc-600">
                 By purchasing, you agree to our Customer Terms and Privacy Policy.
@@ -689,7 +670,6 @@ function TipCard({ creatorId, contentId, creatorName, onTip, user, openAuth }: {
           </button>
         </div>
       )}
-
     </div>
   );
 }
