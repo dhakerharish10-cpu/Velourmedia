@@ -153,9 +153,14 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { content_id: content.id },
       });
-      if (error || !data?.url) {
-        throw new Error('Unable to start checkout. Please try again.');
-      }
+            if (error || !data?.url) {
+        let reason = '';
+        try {
+          const body = await (error as any)?.context?.json?.();
+          reason = body?.detail || body?.error || '';
+        } catch { /* ignore */ }
+        throw new Error(reason || 'Unable to start checkout. Please try again.');
+            }
       window.location.href = data.url;
     } catch (err) {
       console.error(err);
