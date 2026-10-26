@@ -128,7 +128,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
             upsert: false,
           });
         if (uploadError) {
-          console.error('Storage upload error:', uploadError);
+          console.error(console.error('Storage upload error:', uploadError);); alert(err?.message || error?.message || JSON.stringify(err || error));
           throw new Error(`Failed to upload ${media.file.name}: ${uploadError.message}`);
         }
         const { data: urlData } = supabase.storage
@@ -181,13 +181,13 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
         await refreshMyContent();
         await refreshFeed();
       } catch (refreshErr) {
-        console.error('Post-upload refresh failed:', refreshErr);
+        console.error(console.error('Post-upload refresh failed:', refreshErr);); alert(err?.message || error?.message || JSON.stringify(err || error));
       }
 
       onDone?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed.';
-      console.error('Upload failed:', err);
+      console.error(console.error('Upload failed:', err);); alert(err?.message || error?.message || JSON.stringify(err || error));
       addToast(message, 'error');
     } finally {
       setUploading(false);
