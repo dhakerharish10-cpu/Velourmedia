@@ -1,47 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Env values pasted from chat/docs sometimes arrive wrapped in quotes or as a
-// Markdown link like "[https://x.supabase.co](https://x.supabase.co)". Extract the
-// plain URL so createClient doesn't throw "Invalid supabaseUrl" and blank the page.
-function cleanEnv(value: string | undefined): string | undefined {
-  const trimmed = value?.trim().replace(/^['"]|['"]$/g, '').trim();
-  return trimmed || undefined;
-}
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-function cleanUrl(value: string | undefined): string | undefined {
-  const raw = cleanEnv(value);
-  if (!raw) return undefined;
-  const match = raw.match(/https?:\/\/[^\s\])"'<>]+/);
-  if (!match) return undefined;
-  try {
-    return new URL(match[0]).origin;
-  } catch {
-    return undefined;
-  }
-}
-
-export const supabaseUrl = cleanUrl((import.meta.env.VITE_SUPABASE_URL || "https://dsyyghnxebvttrdjvojq.supabase.co") as string | undefined);
-export const supabaseAnonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
-
-// createClient throws when the URL/key are missing, which would crash the bundle
-// before React mounts and leave a blank page. Fall back to placeholders and let
-// main.tsx render a configuration notice instead.
-export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-if (!supabaseConfigured) {
-  console.error(
-    'Missing or invalid VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY. Set them as environment variables and redeploy.'
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Set them in .env and in your hosting environment variables, then rebuild.'
   );
 }
 
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-anon-key',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
+// Catch a key that belongs to a different project (the cause of 401s on login)
+function keyProjectRef(key: string): string | null {
+  try {
+    return JSON.parse(atob(key.split('.')[1])).ref ?? null;
+  } catch {
+    return null; // new-style sb_publishable_ keys are not JWTs
   }
-);
+}
+const urlRef = new URL(supabaseUrl).hostname.split('.')[0];
+const keyRef = keyProjectRef(supabaseAnonKey);
+if (keyRef && keyRef !== urlRef) {
+  throw new Error(`Supabase key is for project "${keyRef}" but the URL is for "${urlRef}".`);
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
