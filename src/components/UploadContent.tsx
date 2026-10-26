@@ -106,6 +106,8 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
     }
 
     setUploading(true);
+    const uploadedPaths: string[] = [];
+    let createdContentId: string | null = null;
 
     try {
       const profileId = activeProfileId || profiles.find((p) => p.is_primary)?.id || profiles[0]?.id;
@@ -128,9 +130,10 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
             upsert: false,
           });
         if (uploadError) {
-          console.error(console.error('Storage upload error:', uploadError);); alert(err?.message || error?.message || JSON.stringify(err || error));
+          console.error('Storage upload error:', uploadError);
           throw new Error(`Failed to upload ${media.file.name}: ${uploadError.message}`);
         }
+        uploadedPaths.push(fileName);
         const { data: urlData } = supabase.storage
           .from('creator-media')
           .getPublicUrl(fileName);
@@ -159,7 +162,11 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
         .select('id')
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError || !contentData) {
+        console.error('Content insert error:', insertError);
+        throw new Error(`Could not save post: ${insertError?.message ?? 'no row returned'}`);
+      }
+      createdContentId = contentData.id;
 
       if (uploadedUrls.length > 1) {
         const mediaRecords = uploadedUrls.map((m, i) => ({
@@ -171,7 +178,10 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
         const { error: mediaError } = await supabase
           .from('content_media')
           .insert(mediaRecords);
-        if (mediaError) throw mediaError;
+        if (mediaError) {
+          console.error('content_media insert error:', mediaError);
+          throw new Error(`Could not save extra media: ${mediaError.message}`);
+        }
       }
 
       addToast(`${uploadedUrls.length} file${uploadedUrls.length > 1 ? 's' : ''} uploaded successfully!`, 'success');
@@ -181,13 +191,22 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
         await refreshMyContent();
         await refreshFeed();
       } catch (refreshErr) {
-        console.error(console.error('Post-upload refresh failed:', refreshErr);); alert(err?.message || error?.message || JSON.stringify(err || error));
+        console.error('Post-upload refresh failed:', refreshErr);
       }
 
       onDone?.();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Upload failed.';
-      console.error(console.error('Upload failed:', err);); alert(err?.message || error?.message || JSON.stringify(err || error));
+      const message =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string } | null)?.message || 'Upload failed.';
+      console.error('Upload failed:', err);
+      try {
+        if (createdContentId) await supabase.from('content').delete().eq('id', createdContentId);
+        if (uploadedPaths.length > 0) await supabase.storage.from('creator-media').remove(uploadedPaths);
+      } catch (cleanupErr) {
+        console.error('Cleanup after failed upload failed:', cleanupErr);
+      }
       addToast(message, 'error');
     } finally {
       setUploading(false);
