@@ -20,7 +20,7 @@ function cleanUrl(value: string | undefined): string | undefined {
   }
 }
 
-export const supabaseUrl = cleanUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
+export const supabaseUrl = cleanUrl((import.meta.env.VITE_SUPABASE_URL || "https://dsyyghnxebvttrdjvojq.supabase.co") as string | undefined);
 export const supabaseAnonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
 
 // createClient throws when the URL/key are missing, which would crash the bundle
