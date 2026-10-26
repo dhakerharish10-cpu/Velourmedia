@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseUrl = 'https://dsyyghnxebvttrdjvojq.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzeXlnaG54ZWJ2dHRyZGp2b2pxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTM4MzIsImV4cCI6MjA5OTA2OTgzMn0.0kDH8X9rmViKtRr64lXtxZhnV_7m8zXxTH7vAv8eX3Q';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Set them in .env and in your hosting environment variables, then rebuild.'
+    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.'
   );
 }
 
@@ -14,7 +14,7 @@ function keyProjectRef(key: string): string | null {
   try {
     return JSON.parse(atob(key.split('.')[1])).ref ?? null;
   } catch {
-    return null; // new-style sb_publishable_ keys are not JWTs
+    return null;
   }
 }
 const urlRef = new URL(supabaseUrl).hostname.split('.')[0];
