@@ -203,23 +203,29 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       const firstMedia = uploadedUrls[0];
       const primaryType = firstMedia.type;
       let thumbnailUrl: string | null = null;
+      const previewUrls: (string | null)[] = [];
       if (!isPaid) {
         thumbnailUrl = primaryType === 'image' ? firstMedia.url : (uploadedUrls.find(u => u.type === 'image')?.url || null);
       } else {
-        const previewSource = mediaFiles.find((m) => m.type === 'image') ?? mediaFiles[0];
-        const blob = await makeTinyPreview(previewSource.file, previewSource.type);
-        if (blob) {
-          const thumbPath = `${creatorId}/thumbs/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-          const { error: thumbError } = await supabase.storage
-            .from('creator-media')
-            .upload(thumbPath, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
-          if (thumbError) {
-            console.warn('Preview upload failed:', thumbError.message);
-          } else {
-            uploaded.push({ bucket: 'creator-media', path: thumbPath });
-            thumbnailUrl = supabase.storage.from('creator-media').getPublicUrl(thumbPath).data.publicUrl;
+        // One tiny public preview per file (about 96px); the originals stay in the private bucket
+        for (const m of mediaFiles) {
+          let previewUrl: string | null = null;
+          const blob = await makeTinyPreview(m.file, m.type);
+          if (blob) {
+            const thumbPath = `${creatorId}/thumbs/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+            const { error: thumbError } = await supabase.storage
+              .from('creator-media')
+              .upload(thumbPath, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+            if (thumbError) {
+              console.warn('Preview upload failed:', thumbError.message);
+            } else {
+              uploaded.push({ bucket: 'creator-media', path: thumbPath });
+              previewUrl = supabase.storage.from('creator-media').getPublicUrl(thumbPath).data.publicUrl;
+            }
           }
+          previewUrls.push(previewUrl);
         }
+        thumbnailUrl = previewUrls.find((u) => !!u) ?? null;
       }
 
       const { data: contentData, error: insertError } = await supabase
@@ -252,6 +258,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           media_url: m.url,
           media_type: m.type,
           display_order: i,
+          preview_url: isPaid ? (previewUrls[i] ?? null) : null,
         }));
         const { error: mediaError } = await supabase
           .from('content_media')
