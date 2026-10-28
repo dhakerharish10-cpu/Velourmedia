@@ -14,6 +14,61 @@ const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
+async function makeTinyPreview(file: File, type: 'image' | 'video'): Promise<Blob | null> {
+  const MAX = 96;
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    let source: CanvasImageSource;
+    let w = 0;
+    let h = 0;
+    if (type === 'image') {
+      const img = new Image();
+      await withTimeout(new Promise<void>((res, rej) => {
+        img.onload = () => res();
+        img.onerror = () => rej(new Error('image load failed'));
+        img.src = objectUrl;
+      }), 8000);
+      source = img; w = img.naturalWidth; h = img.naturalHeight;
+    } else {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = objectUrl;
+      await withTimeout(new Promise<void>((res, rej) => {
+        video.onloadeddata = () => res();
+        video.onerror = () => rej(new Error('video load failed'));
+      }), 8000);
+      await withTimeout(new Promise<void>((res) => {
+        video.onseeked = () => res();
+        video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
+      }), 5000);
+      source = video; w = video.videoWidth; h = video.videoHeight;
+    }
+    if (!w || !h) return null;
+    const scale = Math.min(1, MAX / Math.max(w, h));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w * scale));
+    canvas.height = Math.max(1, Math.round(h * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), 'image/jpeg', 0.5));
+  } catch (e) {
+    console.warn('Preview generation failed:', e);
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export function UploadContent({ onDone }: { onDone?: () => void }) {
   const { user, activeProfileId, profiles, addToast, refreshMyContent, refreshFeed } = useStore();
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
@@ -106,7 +161,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
     }
 
     setUploading(true);
-    const uploadedPaths: string[] = [];
+    const uploaded: { bucket: string; path: string }[] = [];
     let createdContentId: string | null = null;
 
     try {
@@ -119,11 +174,14 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       const creatorId = profileId;
       const uploadedUrls: { url: string; type: 'image' | 'video' }[] = [];
 
+      const isPaid = priceNum > 0;
+      const mediaBucket = isPaid ? 'paid-media' : 'creator-media';
+
       for (const media of mediaFiles) {
         const fileExt = media.file.name.split('.').pop() || (media.type === 'image' ? 'jpg' : 'mp4');
         const fileName = `${creatorId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
-          .from('creator-media')
+          .from(mediaBucket)
           .upload(fileName, media.file, {
             contentType: media.file.type || (media.type === 'image' ? 'image/jpeg' : 'video/mp4'),
             cacheControl: '3600',
@@ -133,16 +191,36 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           console.error('Storage upload error:', uploadError);
           throw new Error(`Failed to upload ${media.file.name}: ${uploadError.message}`);
         }
-        uploadedPaths.push(fileName);
-        const { data: urlData } = supabase.storage
-          .from('creator-media')
-          .getPublicUrl(fileName);
-        uploadedUrls.push({ url: urlData.publicUrl, type: media.type });
+        uploaded.push({ bucket: mediaBucket, path: fileName });
+        if (isPaid) {
+          uploadedUrls.push({ url: fileName, type: media.type });
+        } else {
+          const { data: urlData } = supabase.storage.from('creator-media').getPublicUrl(fileName);
+          uploadedUrls.push({ url: urlData.publicUrl, type: media.type });
+        }
       }
 
       const firstMedia = uploadedUrls[0];
       const primaryType = firstMedia.type;
-      const thumbnailUrl = primaryType === 'image' ? firstMedia.url : (uploadedUrls.find(u => u.type === 'image')?.url || null);
+      let thumbnailUrl: string | null = null;
+      if (!isPaid) {
+        thumbnailUrl = primaryType === 'image' ? firstMedia.url : (uploadedUrls.find(u => u.type === 'image')?.url || null);
+      } else {
+        const previewSource = mediaFiles.find((m) => m.type === 'image') ?? mediaFiles[0];
+        const blob = await makeTinyPreview(previewSource.file, previewSource.type);
+        if (blob) {
+          const thumbPath = `${creatorId}/thumbs/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+          const { error: thumbError } = await supabase.storage
+            .from('creator-media')
+            .upload(thumbPath, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+          if (thumbError) {
+            console.warn('Preview upload failed:', thumbError.message);
+          } else {
+            uploaded.push({ bucket: 'creator-media', path: thumbPath });
+            thumbnailUrl = supabase.storage.from('creator-media').getPublicUrl(thumbPath).data.publicUrl;
+          }
+        }
+      }
 
       const { data: contentData, error: insertError } = await supabase
         .from('content')
@@ -203,7 +281,9 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       console.error('Upload failed:', err);
       try {
         if (createdContentId) await supabase.from('content').delete().eq('id', createdContentId);
-        if (uploadedPaths.length > 0) await supabase.storage.from('creator-media').remove(uploadedPaths);
+        for (const bucket of Array.from(new Set(uploaded.map((u) => u.bucket)))) {
+          await supabase.storage.from(bucket).remove(uploaded.filter((u) => u.bucket === bucket).map((u) => u.path));
+        }
       } catch (cleanupErr) {
         console.error('Cleanup after failed upload failed:', cleanupErr);
       }
@@ -221,7 +301,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       </h3>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* File Upload Zone — multiple files, mobile-optimized */}
         <div
           onClick={() => fileInputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -251,7 +330,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           />
         </div>
 
-        {/* Preview Grid */}
         {mediaFiles.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {mediaFiles.map((media, index) => (
@@ -277,7 +355,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           </div>
         )}
 
-        {/* Title */}
         <div>
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Title</label>
           <input
@@ -289,7 +366,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           />
         </div>
 
-        {/* Description */}
         <div>
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Description (optional)</label>
           <textarea
@@ -301,7 +377,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           />
         </div>
 
-        {/* Price */}
         <div>
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Price (USD $)</label>
           <div className="relative">
@@ -320,14 +395,12 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">Set to 0 for free content. Applies to all {mediaFiles.length || 0} file{mediaFiles.length !== 1 ? 's' : ''}.</p>
         </div>
 
-        {/* Blur Intensity Slider */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs font-medium text-slate-500 dark:text-zinc-400">Preview Blur (0-100%)</label>
             <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 tabular-nums">{blurPercent}%</span>
           </div>
           <div className="flex items-center gap-3">
-            {/* Live preview thumbnail */}
             <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-zinc-700">
               {mediaFiles[0]?.type === 'image' ? (
                 <img
@@ -356,7 +429,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1.5">Controls how blurred the preview thumbnail appears to non-purchasers. 0% = fully visible, 100% = heavily blurred.</p>
         </div>
 
-        {/* Submit */}
         <button
           type="submit"
           disabled={mediaFiles.length === 0 || uploading || !title.trim()}
