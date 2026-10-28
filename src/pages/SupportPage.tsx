@@ -21,7 +21,6 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
     );
     window.location.href = `mailto:support@velourmedia.site?subject=${subject}&body=${body}`;
   };
-  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
