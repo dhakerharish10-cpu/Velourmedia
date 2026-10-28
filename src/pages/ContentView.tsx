@@ -31,10 +31,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [justPurchased, setJustPurchased] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [unlockedMedia, setUnlockedMedia] = useState<{ url: string; type: 'image' | 'video' }[] | null>(null);
 
   const isOwned = isUnlocked(contentId);
   const isFree = content ? Number(content.price) <= 0 : false;
-  const hasAccess = isOwned || isFree;
+  const hasAccess = isOwned || isFree || !!unlockedMedia;
 
   // Whop sends the buyer back here with ?paid=1 after checkout
   const returnedFromCheckout =
@@ -111,28 +112,73 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
   }, [user, refreshPurchases]);
 
-  // The webhook writes the purchase a few seconds after payment, so re-check for ~30s
+  // Ask the server for signed URLs. It allows: free posts, the creator, a logged-in buyer,
+  // or a guest whose browser holds the claim secret saved at checkout.
+  const loadUnlockedMedia = useCallback(async (): Promise<boolean> => {
+    let claim = '';
+    try { claim = localStorage.getItem(`claim:${contentId}`) ?? ''; } catch { /* storage unavailable */ }
+    const { data, error } = await supabase.functions.invoke('get-media', {
+      body: { content_id: contentId, claim },
+    });
+    if (error || !data?.media?.length) return false;
+    setUnlockedMedia(data.media as { url: string; type: 'image' | 'video' }[]);
+    return true;
+  }, [contentId]);
+
+  const isPaidPost = !!content && Number(content.price) > 0;
+  const isPrivatePaid = isPaidPost && !/^https?:\/\//i.test(content?.media_url ?? '');
+
+  // Paid post: check access when the page opens or the login/purchase state changes
   useEffect(() => {
-    if (!user || isOwned || !returnedFromCheckout) return;
+    if (!content || !isPaidPost || unlockedMedia) return;
+    loadUnlockedMedia();
+  }, [content, isPaidPost, unlockedMedia, user, isOwned, loadUnlockedMedia]);
+
+  // Back from checkout: the webhook writes the purchase a few seconds after payment, so retry for ~40s
+  useEffect(() => {
+    if (!content || !returnedFromCheckout || unlockedMedia) return;
     let tries = 0;
     const timer = setInterval(async () => {
       tries += 1;
-      await refreshPurchases();
-      if (tries >= 15) clearInterval(timer);
+      if (user) await refreshPurchases();
+      const ok = await loadUnlockedMedia();
+      if (ok || tries >= 20) clearInterval(timer);
     }, 2000);
     return () => clearInterval(timer);
-  }, [user, isOwned, returnedFromCheckout, refreshPurchases]);
+  }, [content, returnedFromCheckout, unlockedMedia, user, refreshPurchases, loadUnlockedMedia]);
 
   useEffect(() => {
-    if (isOwned && returnedFromCheckout) setJustPurchased(true);
-  }, [isOwned, returnedFromCheckout]);
+    if ((isOwned || unlockedMedia) && returnedFromCheckout) setJustPurchased(true);
+  }, [isOwned, unlockedMedia, returnedFromCheckout]);
+
+  // Signed URLs last 30 minutes: refresh them before they expire
+  useEffect(() => {
+    if (!unlockedMedia || !isPaidPost) return;
+    const t = setInterval(() => { loadUnlockedMedia(); }, 25 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [unlockedMedia, isPaidPost, loadUnlockedMedia]);
+
+  // Coming back from Whop with the browser's Back button must not leave the button stuck
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) setIsRedirecting(false); };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
 
   const allMedia = mediaItems.length > 0
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
     : content ? [{ url: content.media_url, type: content.media_type }] : [];
 
-  const goPrev = () => setActiveIndex((i) => (i === 0 ? allMedia.length - 1 : i - 1));
-  const goNext = () => setActiveIndex((i) => (i === allMedia.length - 1 ? 0 : i + 1));
+  // What the unlocked viewer shows: signed URLs for paid posts, the public URLs for free ones
+  const shownMedia = unlockedMedia ?? (isPrivatePaid ? [] : allMedia);
+  // What the locked view shows: private posts only expose their tiny public preview
+  const previewMedia: { url: string; type: 'image' | 'video' }[] = isPrivatePaid
+    ? (content?.thumbnail_url ? [{ url: content.thumbnail_url, type: 'image' }] : [])
+    : allMedia;
+  const navLength = hasAccess ? shownMedia.length : previewMedia.length;
+
+  const goPrev = () => setActiveIndex((i) => (i === 0 ? navLength - 1 : i - 1));
+  const goNext = () => setActiveIndex((i) => (i === navLength - 1 ? 0 : i + 1));
 
   const touchStartX = useRef(0);
   const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
@@ -148,18 +194,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { content_id: content.id },
       });
-                  if (error || !data?.url) {
+      if (error || !data?.url) {
         let reason = '';
         try {
           const body = await (error as any)?.context?.json?.();
           reason = body?.detail || body?.error || '';
         } catch { /* ignore */ }
-        const label = error
-          ? `${(error as any).name ?? 'Error'}: ${(error as any).message ?? ''}`
-          : `No URL returned: ${JSON.stringify(data)}`;
-        throw new Error(reason || label);
-                  }
-      
+        throw new Error(reason || 'Unable to start checkout. Please try again.');
+      }
+      // Guests: keep the private claim secret so this browser can unlock after paying
+      if (data.claim) {
+        try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { /* storage unavailable */ }
+      }
       window.location.href = data.url;
     } catch (err) {
       console.error(err);
@@ -210,7 +256,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         ) : hasAccess ? (
           /* ---- UNLOCKED VIEW ---- */
           <div className="space-y-4">
-            {/* Post-purchase confirmation header */}
             {justPurchased && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4 flex items-center gap-3 animate-fade-in">
                 <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
@@ -229,9 +274,13 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               onDragStart={(e) => e.preventDefault()}
               style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
             >
-              {allMedia[activeIndex]?.type === 'image' ? (
+              {shownMedia.length === 0 ? (
+                <div className="flex items-center justify-center py-24">
+                  <Loader2 size={28} className="animate-spin text-indigo-400" />
+                </div>
+              ) : shownMedia[activeIndex]?.type === 'image' ? (
                 <img
-                  src={allMedia[activeIndex]?.url}
+                  src={shownMedia[activeIndex]?.url}
                   alt={content.title}
                   className="w-full max-h-[600px] object-contain pointer-events-none"
                   draggable={false}
@@ -240,7 +289,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 />
               ) : (
                 <video
-                  src={allMedia[activeIndex]?.url}
+                  src={shownMedia[activeIndex]?.url}
                   controls
                   controlsList="nodownload noremoteplayback noplaybackrate"
                   className="w-full max-h-[600px]"
@@ -249,7 +298,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 />
               )}
 
-              {allMedia.length > 1 && (
+              {shownMedia.length > 1 && (
                 <>
                   <button
                     onClick={goPrev}
@@ -264,18 +313,16 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     <ChevronRight size={20} />
                   </button>
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 text-xs text-white pointer-events-none">
-                    {activeIndex + 1} / {allMedia.length}
+                    {activeIndex + 1} / {shownMedia.length}
                   </div>
                 </>
               )}
 
-              {/* Protection badge */}
               <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 text-xs text-white pointer-events-none">
                 <Lock size={10} />
                 <span className="font-medium">Protected Content</span>
               </div>
 
-              {/* Dynamic watermark overlay */}
               {user?.email && (
                 <>
                   <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -296,7 +343,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               )}
             </div>
 
-            {/* Info card */}
             <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 mb-2">
                 {content.media_type === 'image' ? <ImageIcon size={12} /> : <Video size={12} />}
@@ -326,7 +372,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
             </div>
 
-            {/* Tip card */}
             <TipCard
               creatorId={content.creator_id}
               contentId={content.id}
@@ -336,7 +381,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               openAuth={openAuth}
             />
 
-            {/* Protection notice */}
             <div className="rounded-xl bg-slate-100 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 px-4 py-3 flex items-center gap-2.5">
               <Lock size={14} className="text-slate-400 dark:text-zinc-500 shrink-0" />
               <p className="text-xs text-slate-500 dark:text-zinc-400">
@@ -345,11 +389,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             </div>
           </div>
         ) : (
-          /* ---- LOCKED UNLOCK VIEW — redesigned ---- */
+          /* ---- LOCKED UNLOCK VIEW ---- */
           <div className="space-y-4">
-            {/* 1. Bright 3D Stacked Card Preview */}
             <div className="relative pb-3" style={{ perspective: '1200px' }}>
-              {allMedia.length > 1 && (
+              {(content.media_count ?? 1) > 1 && (
                 <>
                   <div
                     className="absolute rounded-[24px] bg-white/5 border border-white/10"
@@ -376,7 +419,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </>
               )}
 
-              {/* Main preview card */}
               <div
                 className="relative rounded-[24px] overflow-hidden bg-zinc-900 border-2 border-white/15 shadow-2xl shadow-black/40 transition-transform duration-300 hover:scale-[1.005]"
                 style={{ transformStyle: 'preserve-3d' }}
@@ -389,7 +431,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                   onTouchEnd={onTouchEnd}
                   style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                 >
-                  {allMedia.map((m, i) => (
+                  {previewMedia.map((m, i) => (
                     <div
                       key={i}
                       className={`absolute inset-0 transition-all duration-600 ease-out ${
@@ -416,7 +458,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
                   <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                  {allMedia.length > 1 && (
+                  {previewMedia.length > 1 && (
                     <>
                       <button
                         onClick={goPrev}
@@ -435,10 +477,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     </>
                   )}
 
-                  {allMedia.length > 1 && (
+                  {previewMedia.length > 1 && (
                     <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs text-white font-medium z-10 border border-white/20">
                       {content.media_type === 'image' ? <ImageIcon size={11} /> : <Video size={11} />}
-                      {activeIndex + 1} / {allMedia.length}
+                      {activeIndex + 1} / {previewMedia.length}
                     </div>
                   )}
 
@@ -455,9 +497,9 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                       <p className="text-[11px] font-medium text-white/60 uppercase tracking-wider">One-time USD</p>
                     </div>
 
-                    {allMedia.length > 1 && (
+                    {previewMedia.length > 1 && (
                       <div className="flex items-center gap-2">
-                        {allMedia.map((m, i) => (
+                        {previewMedia.map((m, i) => (
                           <button
                             key={i}
                             onClick={() => setActiveIndex(i)}
@@ -484,7 +526,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
             </div>
 
-            {/* 2. Creator & Post Information */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               <div className="flex items-center gap-3">
                 <button
@@ -537,7 +578,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               )}
             </div>
 
-            {/* 3. Checkout — unlock button */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               <button
                 onClick={onPayToUnlock}
@@ -571,7 +611,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
             </div>
 
-            {/* 4. Compact footer legal links */}
             <div className="text-center pt-3 pb-8 space-y-2">
               <p className="text-[11px] text-zinc-600">
                 By purchasing, you agree to our Customer Terms and Privacy Policy.
