@@ -143,11 +143,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
   const onPayToUnlock = async () => {
     if (!content || isRedirecting) return;
-    if (!user) {
-      addToast('Please log in to unlock this content.', 'error');
-      openAuth('signin');
-      return;
-    }
     setIsRedirecting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
