@@ -13,13 +13,14 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
-      setSent(true);
-    }, 800);
+    const subject = encodeURIComponent(`[${category}] Support Request - ${name}`);
+    const body = encodeURIComponent(
+      `Name: ${name}\nEmail: ${email}\nCategory: ${category}\n\nMessage:\n${message}`
+    );
+    window.location.href = `mailto:support@velourmedia.site?subject=${subject}&body=${body}`;
+  };
   };
 
   return (
