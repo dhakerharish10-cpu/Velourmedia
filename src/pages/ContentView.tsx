@@ -37,7 +37,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const isFree = content ? Number(content.price) <= 0 : false;
   const hasAccess = isOwned || isFree || !!unlockedMedia;
 
-  // Whop sends the buyer back here with ?paid=1 after checkout
   const returnedFromCheckout =
     typeof window !== 'undefined' && window.location.href.includes('paid=1');
 
@@ -112,8 +111,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
   }, [user, refreshPurchases]);
 
-  // Ask the server for signed URLs. It allows: free posts, the creator, a logged-in buyer,
-  // or a guest whose browser holds the claim secret saved at checkout.
   const loadUnlockedMedia = useCallback(async (): Promise<boolean> => {
     let claim = '';
     try { claim = localStorage.getItem(`claim:${contentId}`) ?? ''; } catch { /* storage unavailable */ }
@@ -128,13 +125,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const isPaidPost = !!content && Number(content.price) > 0;
   const isPrivatePaid = isPaidPost && !/^https?:\/\//i.test(content?.media_url ?? '');
 
-  // Paid post: check access when the page opens or the login/purchase state changes
   useEffect(() => {
     if (!content || !isPaidPost || unlockedMedia) return;
     loadUnlockedMedia();
   }, [content, isPaidPost, unlockedMedia, user, isOwned, loadUnlockedMedia]);
 
-  // Back from checkout: the webhook writes the purchase a few seconds after payment, so retry for ~40s
   useEffect(() => {
     if (!content || !returnedFromCheckout || unlockedMedia) return;
     let tries = 0;
@@ -151,14 +146,12 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if ((isOwned || unlockedMedia) && returnedFromCheckout) setJustPurchased(true);
   }, [isOwned, unlockedMedia, returnedFromCheckout]);
 
-  // Signed URLs last 30 minutes: refresh them before they expire
   useEffect(() => {
     if (!unlockedMedia || !isPaidPost) return;
     const t = setInterval(() => { loadUnlockedMedia(); }, 25 * 60 * 1000);
     return () => clearInterval(t);
   }, [unlockedMedia, isPaidPost, loadUnlockedMedia]);
 
-  // Coming back from Whop with the browser's Back button must not leave the button stuck
   useEffect(() => {
     const onShow = (e: PageTransitionEvent) => { if (e.persisted) setIsRedirecting(false); };
     window.addEventListener('pageshow', onShow);
@@ -169,12 +162,20 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
     : content ? [{ url: content.media_url, type: content.media_type }] : [];
 
-  // What the unlocked viewer shows: signed URLs for paid posts, the public URLs for free ones
   const shownMedia = unlockedMedia ?? (isPrivatePaid ? [] : allMedia);
-  // What the locked view shows: private posts only expose their tiny public preview
+
+  // Claude's updated per-file preview logic
   const previewMedia: { url: string; type: 'image' | 'video' }[] = isPrivatePaid
-    ? (content?.thumbnail_url ? [{ url: content.thumbnail_url, type: 'image' }] : [])
+    ? (() => {
+        const perFile = mediaItems
+          .map((m) => (m as ContentMedia & { preview_url?: string | null }).preview_url)
+          .filter((u): u is string => !!u)
+          .map((u) => ({ url: u, type: 'image' as const }));
+        if (perFile.length > 0) return perFile;
+        return content?.thumbnail_url ? [{ url: content.thumbnail_url, type: 'image' as const }] : [];
+      })()
     : allMedia;
+
   const navLength = hasAccess ? shownMedia.length : previewMedia.length;
 
   const goPrev = () => setActiveIndex((i) => (i === 0 ? navLength - 1 : i - 1));
@@ -202,7 +203,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         } catch { /* ignore */ }
         throw new Error(reason || 'Unable to start checkout. Please try again.');
       }
-      // Guests: keep the private claim secret so this browser can unlock after paying
       if (data.claim) {
         try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { /* storage unavailable */ }
       }
@@ -232,7 +232,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button
           onClick={() => onNavigate('')}
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-slate-900 dark:text-white transition-colors mb-6"
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition-colors mb-6"
         >
           <ArrowLeft size={16} />
           Back
