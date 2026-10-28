@@ -545,7 +545,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-base py-3.5 hover:from-indigo-400 hover:to-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isRedirecting ? <Loader2 size={18} className="animate-spin" /> : <Lock size={18} />}
-                {isRedirecting ? 'Preparing checkout...' : user ? `Unlock for $${priceDisplay}` : `Log in to unlock for $${priceDisplay}`}
+                {isRedirecting ? 'Preparing checkout...' : user ? `Unlock for $${priceDisplay}` : `unlock for $${priceDisplay}`}
               </button>
 
               <p className="text-center text-[11px] text-zinc-600 mt-2.5">
