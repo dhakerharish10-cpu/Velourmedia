@@ -1,7 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
-import { supabaseConfigured } from './lib/supabase';
 import './index.css';
 
 function ConfigError() {
@@ -19,5 +18,5 @@ function ConfigError() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{supabaseConfigured ? <App /> : <ConfigError />}</StrictMode>
+  <StrictMode><App /></StrictMode>
 );
