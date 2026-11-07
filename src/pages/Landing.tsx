@@ -2,26 +2,18 @@ import { useState } from 'react';
 import { useStore } from '../lib/store';
 import { Navbar } from '../components/Navbar';
 import {
-  Sparkles,
   ArrowRight,
   Lock,
   Unlock,
   Eye,
   CheckCircle2,
-  DollarSign,
-  TrendingUp,
-  ShieldCheck,
-  Share2,
   Image as ImageIcon,
   Video,
   FileText,
   ChevronDown,
   Copy,
   Check,
-  Play,
   Layers,
-  Heart,
-  Sliders
 } from 'lucide-react';
 
 interface LandingProps {
@@ -39,14 +31,14 @@ export function Landing({ onNavigate }: LandingProps) {
   const [activeMediaTab, setActiveMediaTab] = useState<'photo' | 'video'>('photo');
   const [linkCopied, setLinkCopied] = useState<boolean>(false);
 
-  // Sample cards lock state in features
+  // Showcase state
   const [unlockedCards, setUnlockedCards] = useState<Record<string, boolean>>({});
 
   const toggleCardUnlock = (id: string) => {
     setUnlockedCards((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Earnings Calculator state
+  // Calculator state
   const [calcPrice, setCalcPrice] = useState<number>(24);
   const [calcSales, setCalcSales] = useState<number>(120);
   const platformFeeRate = 0.30;
@@ -83,11 +75,10 @@ export function Landing({ onNavigate }: LandingProps) {
       price: 24,
       cover: 'https://images.unsplash.com/photo-1518173946687-a4c8a383392e?auto=format&fit=crop&w=800&q=80',
       tag: 'Video',
-      isVideo: true,
     },
     {
       id: 'post-3',
-      title: 'Urban Aesthetics & RAW Presets',
+      title: 'Urban Aesthetics & Presets',
       type: 'Pack · 8 Presets + RAW files',
       price: 15,
       cover: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=800&q=80',
@@ -98,19 +89,15 @@ export function Landing({ onNavigate }: LandingProps) {
   const faqs = [
     {
       q: 'What can I sell on Velour?',
-      a: 'Original photography sets, exclusive cinematic videos, behind-the-scenes recordings, and creative digital packages. You retain full copyright ownership of your media.',
+      a: 'Original photography sets, exclusive cinematic videos, behind-the-scenes recordings, audio packs, and creative digital publications. You retain full copyright ownership of your media.',
     },
     {
       q: 'How much can I charge per unlock?',
-      a: 'You have full control. Posts can be priced from $10.00 up to $999.00 USD per unlock.',
-    },
-    {
-      q: 'Do I need to be 18+ to use Velour?',
-      a: 'Yes. All creators and buyers must be at least 18 years old. Creators must pass mandatory one-time government ID verification (KYC) before any content can be posted.',
+      a: 'You have full control. Posts can be set as free ($0) or priced from $10.00 up to $999.00 USD per unlock.',
     },
     {
       q: 'How do fans access unlocked content?',
-      a: 'Immediately upon checkout completion, the media decrypts right in their browser. Fans do not need to download third-party software or pay monthly subscriptions.',
+      a: 'Immediately upon checkout completion, the media decrypts right in their browser. Fans do not need to download third-party software or pay recurring subscriptions.',
     },
     {
       q: 'What are the platform fees?',
@@ -118,7 +105,7 @@ export function Landing({ onNavigate }: LandingProps) {
     },
     {
       q: 'When can I withdraw my earnings?',
-      a: 'Once your identity is verified, you can request direct payouts from your creator wallet to your supported withdrawal method.',
+      a: 'Once account verification is completed, you can request direct payouts from your creator wallet to your supported withdrawal method.',
     },
   ];
 
@@ -126,14 +113,14 @@ export function Landing({ onNavigate }: LandingProps) {
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
       <Navbar onNavigate={onNavigate} currentPath="" />
 
-      {/* ---------------- 01. HERO SECTION WITH FLOATING MEDIA PILLS ---------------- */}
+      {/* ---------------- 01. HERO SECTION (NO 18+ BADGES) ---------------- */}
       <section className="relative overflow-hidden pt-28 pb-20 px-4 sm:px-6 lg:px-8 border-b border-zinc-900">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-indigo-500/15 via-purple-500/5 to-transparent rounded-full blur-[140px] pointer-events-none" />
 
         <div className="max-w-5xl mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-zinc-900/90 border border-zinc-800 text-xs font-medium text-zinc-300 mb-6 shadow-inner">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            18+ Verified Digital Content Platform
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Premium Digital Creator Infrastructure
           </div>
 
           <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white mb-6 leading-[1.08]">
@@ -172,7 +159,7 @@ export function Landing({ onNavigate }: LandingProps) {
             </a>
           </div>
 
-          {/* Floating Pill Chips (Exact Unlocky Hero Badges) */}
+          {/* Floating Pill Badges */}
           <div className="mt-14 flex flex-wrap items-center justify-center gap-3 text-xs">
             <div className="px-4 py-2 rounded-full bg-zinc-900/90 border border-zinc-800/90 text-zinc-200 flex items-center gap-2 shadow-lg">
               <ImageIcon size={14} className="text-indigo-400" /> Photo set · <span className="font-bold text-white">$18</span>
@@ -191,7 +178,7 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </section>
 
-      {/* ---------------- 02. HOW IT WORKS (3 STEPS) ---------------- */}
+      {/* ---------------- 02. HOW IT WORKS ---------------- */}
       <section className="py-24 px-4 sm:px-6 max-w-6xl mx-auto">
         <div className="text-center mb-16">
           <p className="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-2">01 How It Works</p>
@@ -202,20 +189,19 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Step 1 */}
           <div className="rounded-3xl bg-zinc-900/60 border border-zinc-800/80 p-8 flex flex-col justify-between">
             <div>
               <span className="text-xs font-mono font-bold text-indigo-400 tracking-wider">01 CREATE</span>
               <h3 className="text-2xl font-bold text-white mt-3 mb-2">Make something worth opening.</h3>
               <p className="text-sm text-zinc-400 leading-relaxed mb-8">
-                Photos, videos, audio, or PDFs. Choose what to share and set your price. Verify your identity (KYC) before publishing.
+                Photos, videos, audio, or PDFs. Choose what to share and set your price. Verify your account details before publishing.
               </p>
             </div>
             <div className="rounded-2xl bg-zinc-950 border border-zinc-800 p-4">
               <div className="flex items-center justify-between text-xs mb-2">
                 <span className="text-zinc-400">New post · Draft</span>
                 <span className="text-emerald-400 flex items-center gap-1 text-[11px] font-semibold">
-                  <CheckCircle2 size={12} /> Identity verified ✓
+                  <CheckCircle2 size={12} /> Account verified ✓
                 </span>
               </div>
               <p className="text-sm font-semibold text-white">Golden Hour · Photo Set</p>
@@ -226,7 +212,6 @@ export function Landing({ onNavigate }: LandingProps) {
             </div>
           </div>
 
-          {/* Step 2 */}
           <div className="rounded-3xl bg-zinc-900/60 border border-zinc-800/80 p-8 flex flex-col justify-between">
             <div>
               <span className="text-xs font-mono font-bold text-purple-400 tracking-wider">02 SHARE</span>
@@ -249,7 +234,6 @@ export function Landing({ onNavigate }: LandingProps) {
             </div>
           </div>
 
-          {/* Step 3 */}
           <div className="rounded-3xl bg-zinc-900/60 border border-zinc-800/80 p-8 flex flex-col justify-between">
             <div>
               <span className="text-xs font-mono font-bold text-emerald-400 tracking-wider">03 UNLOCK</span>
@@ -275,7 +259,7 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </section>
 
-      {/* ---------------- 03. TRY IT (INTERACTIVE SIMULATOR - EXACT UNLOCKY MODEL) ---------------- */}
+      {/* ---------------- 03. TRY IT SIMULATOR ---------------- */}
       <section id="try-it" className="py-24 px-4 sm:px-6 bg-zinc-900/40 border-y border-zinc-900">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
@@ -284,7 +268,6 @@ export function Landing({ onNavigate }: LandingProps) {
             <p className="text-sm sm:text-base text-zinc-400 mt-2">Make a sample post. Set a price. See how it feels.</p>
           </div>
 
-          {/* Toggle Tab */}
           <div className="flex justify-center mb-10">
             <div className="inline-flex rounded-2xl bg-zinc-900 p-1.5 border border-zinc-800">
               <button
@@ -306,10 +289,8 @@ export function Landing({ onNavigate }: LandingProps) {
             </div>
           </div>
 
-          {/* Simulator Card Box */}
           <div className="rounded-3xl bg-zinc-900/90 border border-zinc-800 p-6 sm:p-10 max-w-xl mx-auto shadow-2xl">
             {simulatorMode === 'editor' ? (
-              /* EDITOR VIEW */
               <div className="space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-zinc-800 text-xs">
                   <span className="text-zinc-400">Sample post · not published</span>
@@ -357,7 +338,6 @@ export function Landing({ onNavigate }: LandingProps) {
                   />
                 </div>
 
-                {/* Media Type Switcher */}
                 <div className="pt-2">
                   <label className="block text-xs font-semibold text-zinc-400 mb-2">Media Format</label>
                   <div className="grid grid-cols-2 gap-3">
@@ -390,14 +370,12 @@ export function Landing({ onNavigate }: LandingProps) {
                 </button>
               </div>
             ) : (
-              /* FAN VIEW (LOCKED / UNLOCKED) */
               <div>
                 <div className="flex items-center justify-between pb-3 mb-4 border-b border-zinc-800 text-xs text-zinc-400">
                   <span className="font-mono text-zinc-300">velourmedia.site/@creator</span>
                   <span className="font-semibold text-indigo-400">{simUnlocked ? 'Unlocked · Full View' : 'Fan View (Locked)'}</span>
                 </div>
 
-                {/* Interactive Visual Media Container */}
                 <div className="relative rounded-2xl overflow-hidden aspect-[4/3] bg-zinc-950 border border-zinc-800 flex items-center justify-center mb-5">
                   <img
                     src={
@@ -411,7 +389,6 @@ export function Landing({ onNavigate }: LandingProps) {
                     }`}
                   />
 
-                  {/* Lock Screen Overlay */}
                   {!simUnlocked && (
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
                       <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white mb-3 shadow-xl">
@@ -426,7 +403,6 @@ export function Landing({ onNavigate }: LandingProps) {
                     </div>
                   )}
 
-                  {/* Unlocked Granted Overlay */}
                   {simUnlocked && (
                     <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full bg-emerald-500/95 text-white text-xs font-bold backdrop-blur-md flex items-center gap-1.5 shadow-xl">
                       <Unlock size={13} /> Access Granted
@@ -474,7 +450,7 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </section>
 
-      {/* ---------------- 04. DISCOVER LIVE SAMPLE POSTS (SHOWCASE CARDS) ---------------- */}
+      {/* ---------------- 04. SHOWCASE CARDS ---------------- */}
       <section className="py-24 px-4 sm:px-6 max-w-6xl mx-auto">
         <div className="text-center mb-16">
           <p className="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-2">03 Features</p>
@@ -590,7 +566,7 @@ export function Landing({ onNavigate }: LandingProps) {
                 <p className="text-2xl font-bold text-zinc-200 mt-1">${grossTotal.toLocaleString()}</p>
               </div>
               <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800">
-                <p className="text-xs text-zinc-500">Velour platform fee (30%)</p>
+                <p className="text-xs text-zinc-500">Platform fee (30%)</p>
                 <p className="text-2xl font-bold text-rose-400 mt-1">-${platformFeeTotal.toLocaleString()}</p>
               </div>
               <div className="p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
@@ -606,7 +582,7 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </section>
 
-      {/* ---------------- 06. FAQ SECTION (EXACT ACCORDION) ---------------- */}
+      {/* ---------------- 06. FAQ SECTION ---------------- */}
       <section className="py-24 px-4 sm:px-6 max-w-4xl mx-auto">
         <div className="text-center mb-16">
           <p className="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-2">05 FAQ</p>
@@ -654,20 +630,57 @@ export function Landing({ onNavigate }: LandingProps) {
           >
             Start creating <ArrowRight size={18} />
           </button>
-          <p className="mt-4 text-[11px] text-zinc-500">18+ · Mandatory identity verification (KYC) before publishing.</p>
         </div>
       </section>
 
-      {/* ---------------- 08. FOOTER WITH LEGAL LINKS ---------------- */}
-      <footer className="py-12 px-4 sm:px-6 border-t border-zinc-900 text-xs text-zinc-500">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <p>© 2026 Velour Media. All rights reserved. 18+ Verified Platform.</p>
-          <div className="flex flex-wrap justify-center gap-6">
-            <button onClick={() => onNavigate('terms')} className="hover:text-zinc-300 transition-colors">Terms of Service</button>
-            <button onClick={() => onNavigate('privacy')} className="hover:text-zinc-300 transition-colors">Privacy Policy</button>
-            <button onClick={() => onNavigate('refund-policy')} className="hover:text-zinc-300 transition-colors">Refund Policy</button>
-            <button onClick={() => onNavigate('support')} className="hover:text-zinc-300 transition-colors">Contact Support</button>
+      {/* ---------------- 08. UNLOCKY-STYLE MULTI-COLUMN LEGAL FOOTER ---------------- */}
+      <footer className="py-16 px-4 sm:px-6 border-t border-zinc-900 bg-black/40 text-xs">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
+          {/* Brand Col */}
+          <div className="space-y-3">
+            <span className="text-lg font-black tracking-wider text-white">velourmedia.site</span>
+            <p className="text-zinc-500 leading-relaxed">
+              For what you make next. Direct digital content distribution and pay-to-unlock infrastructure.
+            </p>
           </div>
+
+          {/* Resources */}
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-3 font-semibold">Resources</p>
+            <ul className="space-y-2 text-zinc-500">
+              <li><button onClick={() => onNavigate('dashboard')} className="hover:text-zinc-300">Creator studio</button></li>
+              <li><button onClick={() => onNavigate('dashboard')} className="hover:text-zinc-300">Your purchases</button></li>
+              <li><button onClick={() => onNavigate('support')} className="hover:text-zinc-300">Contact support</button></li>
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Service status</button></li>
+            </ul>
+          </div>
+
+          {/* Legal Policies */}
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-3 font-semibold">Legal & Policies</p>
+            <ul className="space-y-2 text-zinc-500">
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-emerald-400 font-medium">Legal center</button></li>
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Customer terms</button></li>
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Creator terms</button></li>
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Privacy policy</button></li>
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Refund policy</button></li>
+            </ul>
+          </div>
+
+          {/* Trust & Operations */}
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-3 font-semibold">Trust & Safety</p>
+            <ul className="space-y-2 text-zinc-500">
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Complaints & appeals</button></li>
+              <li><button onClick={() => onNavigate('legal')} className="hover:text-zinc-300">Law enforcement</button></li>
+              <li><a href="mailto:support@velourmedia.site" className="hover:text-zinc-300">support@velourmedia.site</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto pt-8 border-t border-zinc-900/80 flex flex-col sm:flex-row items-center justify-between text-zinc-600 text-[11px]">
+          <p>© 2026 Velour Media. All rights reserved.</p>
+          <p className="mt-2 sm:mt-0 font-mono">Document version 3.3</p>
         </div>
       </footer>
     </div>
