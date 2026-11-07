@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
-import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye } from 'lucide-react';
+import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye, ShieldCheck } from 'lucide-react';
+import { KycVerification } from './KycVerification';
 
 interface MediaFile {
   file: File;
@@ -69,7 +70,7 @@ async function makeTinyPreview(file: File, type: 'image' | 'video'): Promise<Blo
   }
 }
 
-export function UploadContent({ onDone }: { onDone?: () => void }) {
+function UploadForm({ onDone }: { onDone?: () => void }) {
   const { user, activeProfileId, profiles, addToast, refreshMyContent, refreshFeed } = useStore();
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [title, setTitle] = useState('');
@@ -207,7 +208,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       if (!isPaid) {
         thumbnailUrl = primaryType === 'image' ? firstMedia.url : (uploadedUrls.find(u => u.type === 'image')?.url || null);
       } else {
-        // One tiny public preview per file (about 96px); the originals stay in the private bucket
         for (const m of mediaFiles) {
           let previewUrl: string | null = null;
           const blob = await makeTinyPreview(m.file, m.type);
@@ -286,6 +286,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
           ? err.message
           : (err as { message?: string } | null)?.message || 'Upload failed.';
       console.error('Upload failed:', err);
+      const gateRejected = /row-level security/i.test(message);
       try {
         if (createdContentId) await supabase.from('content').delete().eq('id', createdContentId);
         for (const bucket of Array.from(new Set(uploaded.map((u) => u.bucket)))) {
@@ -294,7 +295,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       } catch (cleanupErr) {
         console.error('Cleanup after failed upload failed:', cleanupErr);
       }
-      addToast(message, 'error');
+      addToast(gateRejected ? 'Your account must be verified before you can post.' : message, 'error');
     } finally {
       setUploading(false);
     }
@@ -455,5 +456,112 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
         </button>
       </form>
     </div>
+  );
+}
+
+type GateState =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'verified' }
+  | { kind: 'pending' }
+  | { kind: 'unverified' }
+  | { kind: 'rejected'; reason: string | null };
+
+export function UploadContent({ onDone }: { onDone?: () => void }) {
+  const { user, activeProfileId, profiles, refreshProfiles } = useStore();
+  const [gate, setGate] = useState<GateState>({ kind: 'loading' });
+  const [checking, setChecking] = useState(false);
+
+  const profileId =
+    activeProfileId || profiles.find((p) => p.is_primary)?.id || profiles[0]?.id || user?.id || null;
+
+  const loadGate = useCallback(async () => {
+    if (!user) return;
+    setChecking(true);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, role, kyc_status')
+      .or(`id.eq.${user.id},owner_id.eq.${user.id}`);
+
+    if (error || !data) {
+      console.error('Could not check verification status:', error?.message);
+      setGate({ kind: 'error' });
+      setChecking(false);
+      return;
+    }
+
+    const rows = data as { id: string; role: string | null; kyc_status: string | null }[];
+    if (rows.some((r) => r.role === 'admin' || r.kyc_status === 'verified')) {
+      setGate({ kind: 'verified' });
+    } else if (rows.some((r) => r.kyc_status === 'pending')) {
+      setGate({ kind: 'pending' });
+    } else if (rows.some((r) => r.kyc_status === 'rejected')) {
+      const { data: latest } = await supabase
+        .from('creator_kyc')
+        .select('rejection_reason')
+        .eq('status', 'rejected')
+        .order('reviewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setGate({ kind: 'rejected', reason: latest?.rejection_reason ?? null });
+    } else {
+      setGate({ kind: 'unverified' });
+    }
+    setChecking(false);
+  }, [user]);
+
+  useEffect(() => {
+    loadGate();
+  }, [loadGate]);
+
+  if (!user) return null;
+
+  if (gate.kind === 'loading') {
+    return (
+      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-10 text-center">
+        <Loader2 size={26} className="animate-spin text-indigo-500 mx-auto" />
+        <p className="text-sm text-slate-400 dark:text-zinc-500 mt-3">Checking your account...</p>
+      </div>
+    );
+  }
+
+  if (gate.kind === 'error') {
+    return (
+      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-6 text-center">
+        <ShieldCheck size={26} className="text-slate-400 mx-auto mb-2" />
+        <p className="text-sm text-slate-600 dark:text-zinc-300">We could not check your verification status.</p>
+        <button
+          type="button"
+          onClick={loadGate}
+          className="mt-4 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (gate.kind === 'verified') return <UploadForm onDone={onDone} />;
+
+  if (!profileId) {
+    return (
+      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-6 text-center text-sm text-slate-500 dark:text-zinc-400">
+        Complete your creator profile first, then come back to verify your identity.
+      </div>
+    );
+  }
+
+  return (
+    <KycVerification
+      profileId={profileId}
+      status={gate.kind === 'rejected' ? 'rejected' : gate.kind === 'pending' ? 'pending' : 'unverified'}
+      rejectionReason={gate.kind === 'rejected' ? gate.reason : null}
+      onSubmitted={() => {
+        setGate({ kind: 'pending' });
+        refreshProfiles();
+      }}
+      onRefresh={loadGate}
+      refreshing={checking}
+    />
   );
 }
