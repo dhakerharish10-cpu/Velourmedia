@@ -7,9 +7,9 @@ import {
   Users, 
   ShoppingBag, 
   Scale, 
-  AlertTriangle,
-  RotateCcw,
-  ChevronRight
+  AlertTriangle, 
+  RotateCcw, 
+  ChevronRight 
 } from 'lucide-react';
 
 interface LegalCenterProps {
@@ -255,9 +255,7 @@ export function LegalCenter({ onNavigate }: LegalCenterProps) {
   );
 }
 
-// -----------------------------------------------------------------------------
 // 1. CREATOR TERMS
-// -----------------------------------------------------------------------------
 function CreatorTermsDoc() {
   return (
     <article className="prose prose-invert max-w-none text-zinc-300">
@@ -330,7 +328,7 @@ function CreatorTermsDoc() {
         </section>
 
         <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR[span_47](start_span)[span_47](end_span)</h3>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
           <p className="font-bold text-white">Velour Media</p>
           <p className="text-xs text-zinc-400">Email: support@velourmedia.site</p>
           <p className="text-xs text-zinc-400">Website: https://velourmedia.site</p>
@@ -340,20 +338,18 @@ function CreatorTermsDoc() {
   );
 }
 
-// -----------------------------------------------------------------------------
 // 2. CUSTOMER TERMS
-// -----------------------------------------------------------------------------
 function CustomerTermsDoc() {
   return (
     <article className="prose prose-invert max-w-none text-zinc-300">
       <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Customer terms</h1>
-      <p className="text-sm text-zinc-400 mb-2">Terms for buying digital content, payment totals, access windows, refunds and customer rights on velourmedia.site.[span_48](start_span)[span_48](end_span)</p>
-      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_49](start_span)[span_49](end_span)</p>
+      <p className="text-sm text-zinc-400 mb-2">Terms for buying digital content, payment totals, access windows, refunds and customer rights on velourmedia.site.[span_47](start_span)[span_47](end_span)</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_48](start_span)[span_48](end_span)</p>
 
       <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
-        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_50](start_span)[span_50](end_span)</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_49](start_span)[span_49](end_span)</p>
         <p className="text-sm text-zinc-200 leading-relaxed">
-          These terms explain your rights and responsibilities when buying access to creator content from Velour Media on velourmedia.site.[span_51](start_span)[span_51](end_span) Check the content description, checkout total and access terms before paying.[span_52](start_span)[span_52](end_span)
+          These terms explain your rights and responsibilities when buying access to creator content from Velour Media on velourmedia.site.[span_50](start_span)[span_50](end_span) Check the content description, checkout total and access terms before paying.[span_51](start_span)[span_51](end_span)
         </p>
       </div>
 
@@ -361,45 +357,45 @@ function CustomerTermsDoc() {
         <section>
           <h2 className="text-lg font-bold text-white mb-2">The service and your account</h2>
           <p>
-            These terms are an agreement with Velour Media.[span_53](start_span)[span_53](end_span) You must be at least 18 and legally able to contract.[span_54](start_span)[span_54](end_span) Supply accurate details and protect account and purchase-access credentials.[span_55](start_span)[span_55](end_span)
+            These terms are an agreement with Velour Media.[span_52](start_span)[span_52](end_span) You must be at least 18 and legally able to contract.[span_53](start_span)[span_53](end_span) Supply accurate details and protect account and purchase-access credentials.[span_54](start_span)[span_54](end_span)
           </p>
           <p className="mt-2">
-            Velour Media is the merchant of record for all sales.[span_56](start_span)[span_56](end_span) Creators license their content to Velour Media, which sells access to buyers.[span_57](start_span)[span_57](end_span) Creators retain ownership of their content.[span_58](start_span)[span_58](end_span) Payment services may have additional applicable terms.[span_59](start_span)[span_59](end_span)
+            Velour Media is the merchant of record for all sales.[span_55](start_span)[span_55](end_span) Creators license their content to Velour Media, which sells access to buyers.[span_56](start_span)[span_56](end_span) Creators retain ownership of their content.[span_57](start_span)[span_57](end_span) Payment services may have additional applicable terms.[span_58](start_span)[span_58](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Payments and totals</h2>
           <p>
-            You authorize the total displayed at checkout, including any disclosed fees or taxes.[span_60](start_span)[span_60](end_span) Payment methods and availability vary by creator, country and provider.[span_61](start_span)[span_61](end_span)
+            You authorize the total displayed at checkout, including any disclosed fees or taxes.[span_59](start_span)[span_59](end_span) Payment methods and availability vary by creator, country and provider.[span_60](start_span)[span_60](end_span)
           </p>
           <p className="mt-2">
-            Payments are handled by payment services for the relevant transaction.[span_62](start_span)[span_62](end_span) Access is confirmed through our payment-verification process; a pending or successful browser screen alone does not establish fulfillment.[span_63](start_span)[span_63](end_span) If payment appears uncertain, check its status or contact support before paying again.[span_64](start_span)[span_64](end_span)
+            Payments are handled by payment services for the relevant transaction.[span_61](start_span)[span_61](end_span) Access is confirmed through our payment-verification process; a pending or successful browser screen alone does not establish fulfillment.[span_62](start_span)[span_62](end_span) If payment appears uncertain, check its status or contact support before paying again.[span_63](start_span)[span_63](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">What a purchase gives you</h2>
           <p>
-            A purchase gives you limited, non-exclusive, non-transferable access for personal, private and non-commercial use, according to the displayed purchase terms.[span_65](start_span)[span_65](end_span) It does not transfer copyright or permit redistribution, resale, public posting or AI-model training.[span_66](start_span)[span_66](end_span)
+            A purchase gives you limited, non-exclusive, non-transferable access for personal, private and non-commercial use, according to the displayed purchase terms.[span_64](start_span)[span_64](end_span) It does not transfer copyright or permit redistribution, resale, public posting or AI-model training.[span_65](start_span)[span_65](end_span)
           </p>
           <p className="mt-2">
-            Eligible one-off paid purchases currently have a 3-hour access window beginning on first content access.[span_67](start_span)[span_67](end_span) The displayed checkout and access terms govern the relevant purchase.[span_68](start_span)[span_68](end_span) Downloading is available only where offered; retain permitted downloads before access expires.[span_69](start_span)[span_69](end_span) An unlock does not promise perpetual hosting or access.[span_70](start_span)[span_70](end_span)
+            Eligible one-off paid purchases currently have a 3-hour access window beginning on first content access.[span_66](start_span)[span_66](end_span) The displayed checkout and access terms govern the relevant purchase.[span_67](start_span)[span_67](end_span) Downloading is available only where offered; retain permitted downloads before access expires.[span_68](start_span)[span_68](end_span) An unlock does not promise perpetual hosting or access.[span_69](start_span)[span_69](end_span)
           </p>
           <p className="mt-2">
-            Content can become unavailable because of removal, account restrictions or technical issues.[span_71](start_span)[span_71](end_span) Mandatory rights concerning non-delivery or defective digital content remain available.[span_72](start_span)[span_72](end_span)
+            Content can become unavailable because of removal, account restrictions or technical issues.[span_70](start_span)[span_70](end_span) Mandatory rights concerning non-delivery or defective digital content remain available.[span_71](start_span)[span_71](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Refunds and billing problems</h2>
           <p>
-            We give refunds for duplicate charges, unresolved paid-access failures and content materially different from its description.[span_73](start_span)[span_73](end_span) Request a refund at support@velourmedia.site with your purchase reference, checkout email and a description of the issue.[span_74](start_span)[span_74](end_span) Requests are reviewed within 2 business days; approved refunds typically reach the original payment method in 5-10 business days.[span_75](start_span)[span_75](end_span) Our separate Refund Policy explains the process.[span_76](start_span)[span_76](end_span)
+            We give refunds for duplicate charges, unresolved paid-access failures and content materially different from its description.[span_72](start_span)[span_72](end_span) Request a refund at support@velourmedia.site with your purchase reference, checkout email and a description of the issue.[span_73](start_span)[span_73](end_span) Requests are reviewed within 2 business days; approved refunds typically reach the original payment method in 5-10 business days.[span_74](start_span)[span_74](end_span) Our separate Refund Policy explains the process.[span_75](start_span)[span_75](end_span)
           </p>
         </section>
 
         <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR[span_77](start_span)[span_77](end_span)</h3>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
           <p className="font-bold text-white">Velour Media</p>
           <p className="text-xs text-zinc-400">Email: support@velourmedia.site</p>
         </section>
@@ -408,20 +404,18 @@ function CustomerTermsDoc() {
   );
 }
 
-// -----------------------------------------------------------------------------
 // 3. PRIVACY POLICY
-// -----------------------------------------------------------------------------
 function PrivacyPolicyDoc() {
   return (
     <article className="prose prose-invert max-w-none text-zinc-300">
       <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Privacy policy</h1>
-      <p className="text-sm text-zinc-400 mb-2">How velourmedia.site uses account, purchase, verification and technical information, and how to make a privacy request.[span_78](start_span)[span_78](end_span)</p>
-      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_79](start_span)[span_79](end_span)</p>
+      <p className="text-sm text-zinc-400 mb-2">How velourmedia.site uses account, purchase, verification and technical information, and how to make a privacy request.[span_76](start_span)[span_76](end_span)</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_77](start_span)[span_77](end_span)</p>
 
       <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
-        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_80](start_span)[span_80](end_span)</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_78](start_span)[span_78](end_span)</p>
         <p className="text-sm text-zinc-200 leading-relaxed">
-          We use information to operate your account, deliver content, process transactions and keep the service safe.[span_81](start_span)[span_81](end_span) This policy explains the information involved, who may receive it and the choices available to you.[span_82](start_span)[span_82](end_span)
+          We use information to operate your account, deliver content, process transactions and keep the service safe.[span_79](start_span)[span_79](end_span) This policy explains the information involved, who may receive it and the choices available to you.[span_80](start_span)[span_80](end_span)
         </p>
       </div>
 
@@ -429,38 +423,38 @@ function PrivacyPolicyDoc() {
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Information we use</h2>
           <ul className="list-disc pl-5 space-y-1.5 text-zinc-400">
-            <li><strong>Account details:</strong> name, email, phone number, authentication records, language and account preferences.[span_83](start_span)[span_83](end_span)</li>
-            <li><strong>Creator details:</strong> public profile, social links, content, prices and account settings.[span_84](start_span)[span_84](end_span)</li>
-            <li><strong>Transactions:</strong> purchases, receipts, payment references, limited payment-method details, balances and payout information.[span_85](start_span)[span_85](end_span)</li>
-            <li><strong>Verification:</strong> identity details, documents, images, verification results and information supplied to identity or payment providers.[span_86](start_span)[span_86](end_span)</li>
-            <li><strong>Communications:</strong> support messages, attachments, abuse reports and related correspondence.[span_87](start_span)[span_87](end_span)</li>
-            <li><strong>Technical information:</strong> IP address, approximate country, device/browser information, access logs and service usage.[span_88](start_span)[span_88](end_span)</li>
+            <li><strong>Account details:</strong> name, email, phone number, authentication records, language and account preferences.[span_81](start_span)[span_81](end_span)</li>
+            <li><strong>Creator details:</strong> public profile, social links, content, prices and account settings.[span_82](start_span)[span_82](end_span)</li>
+            <li><strong>Transactions:</strong> purchases, receipts, payment references, limited payment-method details, balances and payout information.[span_83](start_span)[span_83](end_span)</li>
+            <li><strong>Verification:</strong> identity details, documents, images, verification results and information supplied to identity or payment providers.[span_84](start_span)[span_84](end_span)</li>
+            <li><strong>Communications:</strong> support messages, attachments, abuse reports and related correspondence.[span_85](start_span)[span_85](end_span)</li>
+            <li><strong>Technical information:</strong> IP address, approximate country, device/browser information, access logs and service usage.[span_86](start_span)[span_86](end_span)</li>
           </ul>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Why we use it</h2>
           <p>
-            We use information to provide accounts and purchased access, process sales and payouts, verify eligibility, answer support requests, prevent fraud, investigate reports, moderate content and comply with legal obligations.[span_89](start_span)[span_89](end_span)
+            We use information to provide accounts and purchased access, process sales and payouts, verify eligibility, answer support requests, prevent fraud, investigate reports, moderate content and comply with legal obligations.[span_87](start_span)[span_87](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Identity and verification information</h2>
           <p>
-            Identity providers may examine identity documents and selfies for verification.[span_90](start_span)[span_90](end_span) Automated moderation may assess uploaded images or video frames for unsafe content, estimated age and face matches associated with impersonation.[span_91](start_span)[span_91](end_span) Verification records and moderation evidence are restricted to authorized reviewers and are not public profile information.[span_92](start_span)[span_92](end_span)
+            Identity providers may examine identity documents and selfies for verification.[span_88](start_span)[span_88](end_span) Automated moderation may assess uploaded images or video frames for unsafe content, estimated age and face matches associated with impersonation.[span_89](start_span)[span_89](end_span) Verification records and moderation evidence are restricted to authorized reviewers and are not public profile information.[span_90](start_span)[span_90](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Who may receive information</h2>
           <p>
-            Public profile information and content previews are visible according to creator settings.[span_93](start_span)[span_93](end_span) We use reputable services for database hosting (Supabase), content distribution, payment processing, and transactional messaging.[span_94](start_span)[span_94](end_span) We do not sell personal information or share mobile numbers for third-party marketing.[span_95](start_span)[span_95](end_span)
+            Public profile information and content previews are visible according to creator settings.[span_91](start_span)[span_91](end_span) We use reputable services for database hosting (Supabase), content distribution, payment processing, and transactional messaging.[span_92](start_span)[span_92](end_span) We do not sell personal information or share mobile numbers for third-party marketing.[span_93](start_span)[span_93](end_span)
           </p>
         </section>
 
         <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PRIVACY CONTACT[span_96](start_span)[span_96](end_span)</h3>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PRIVACY CONTACT</h3>
           <p className="font-bold text-white">Velour Media Privacy Desk</p>
           <p className="text-xs text-zinc-400">Email: privacy@velourmedia.site</p>
         </section>
@@ -469,20 +463,18 @@ function PrivacyPolicyDoc() {
   );
 }
 
-// -----------------------------------------------------------------------------
 // 4. REFUND POLICY
-// -----------------------------------------------------------------------------
 function RefundPolicyDoc() {
   return (
     <article className="prose prose-invert max-w-none text-zinc-300">
       <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Refund Policy</h1>
-      <p className="text-sm text-zinc-400 mb-2">When velourmedia.site gives refunds, how to request one and how long a refund takes.[span_97](start_span)[span_97](end_span)</p>
-      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_98](start_span)[span_98](end_span)</p>
+      <p className="text-sm text-zinc-400 mb-2">When velourmedia.site gives refunds, how to request one and how long a refund takes.[span_94](start_span)[span_94](end_span)</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_95](start_span)[span_95](end_span)</p>
 
       <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
-        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_99](start_span)[span_99](end_span)</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_96](start_span)[span_96](end_span)</p>
         <p className="text-sm text-zinc-200 leading-relaxed">
-          Velour Media gives refunds for duplicate charges, unresolved paid-access failures and content materially different from its description.[span_100](start_span)[span_100](end_span) Request help at support@velourmedia.site.[span_101](start_span)[span_101](end_span)
+          Velour Media gives refunds for duplicate charges, unresolved paid-access failures and content materially different from its description.[span_97](start_span)[span_97](end_span) Request help at support@velourmedia.site.[span_98](start_span)[span_98](end_span)
         </p>
       </div>
 
@@ -490,29 +482,29 @@ function RefundPolicyDoc() {
         <section>
           <h2 className="text-lg font-bold text-white mb-2">When refunds are given</h2>
           <p>
-            We give refunds for duplicate charges, paid-access failures that remain unresolved and content materially different from its description.[span_102](start_span)[span_102](end_span) Include enough information for us to verify the purchase and the problem.[span_103](start_span)[span_103](end_span)
+            We give refunds for duplicate charges, paid-access failures that remain unresolved and content materially different from its description.[span_99](start_span)[span_99](end_span) Include enough information for us to verify the purchase and the problem.[span_100](start_span)[span_100](end_span)
           </p>
           <p className="mt-2">
-            Digital-content change-of-mind refunds may be limited where the law permits.[span_104](start_span)[span_104](end_span) This policy does not remove mandatory rights to cancellation, withdrawal, repair, replacement or refund.[span_105](start_span)[span_105](end_span) A digital-content withdrawal right is lost only when the legally required consent, acknowledgment and confirmation conditions are met.[span_106](start_span)[span_106](end_span)
+            Digital-content change-of-mind refunds may be limited where the law permits.[span_101](start_span)[span_101](end_span) This policy does not remove mandatory rights to cancellation, withdrawal, repair, replacement or refund.[span_102](start_span)[span_102](end_span) A digital-content withdrawal right is lost only when the legally required consent, acknowledgment and confirmation conditions are met.[span_103](start_span)[span_103](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">How to request a refund</h2>
           <p>
-            Email support@velourmedia.site with the email used at checkout, your purchase reference if available, the content or checkout URL and a description of the problem.[span_107](start_span)[span_107](end_span) For a duplicate charge, include the dates and amounts of the charges.[span_108](start_span)[span_108](end_span) Do not send full card numbers, security codes or passwords.[span_109](start_span)[span_109](end_span)
+            Email support@velourmedia.site with the email used at checkout, your purchase reference if available, the content or checkout URL and a description of the problem.[span_104](start_span)[span_104](end_span) For a duplicate charge, include the dates and amounts of the charges.[span_105](start_span)[span_105](end_span) Do not send full card numbers, security codes or passwords.[span_106](start_span)[span_106](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Review and refund timing</h2>
           <p>
-            We review refund requests within 2 business days and reply to the email you provide.[span_110](start_span)[span_110](end_span) Approved refunds are returned to the original payment method and typically arrive within 5-10 business days after approval.[span_111](start_span)[span_111](end_span)
+            We review refund requests within 2 business days and reply to the email you provide.[span_107](start_span)[span_107](end_span) Approved refunds are returned to the original payment method and typically arrive within 5-10 business days after approval.[span_108](start_span)[span_108](end_span)
           </p>
         </section>
 
         <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR[span_112](start_span)[span_112](end_span)</h3>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
           <p className="font-bold text-white">Velour Media</p>
           <p className="text-xs text-zinc-400">Email: support@velourmedia.site</p>
         </section>
@@ -521,20 +513,18 @@ function RefundPolicyDoc() {
   );
 }
 
-// -----------------------------------------------------------------------------
 // 5. COMPLAINTS & APPEALS
-// -----------------------------------------------------------------------------
 function ComplaintsDoc() {
   return (
     <article className="prose prose-invert max-w-none text-zinc-300">
       <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Complaints and appeals</h1>
-      <p className="text-sm text-zinc-400 mb-2">How to report content, challenge a restriction or request review of a velourmedia.site decision.[span_113](start_span)[span_113](end_span)</p>
-      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_114](start_span)[span_114](end_span)</p>
+      <p className="text-sm text-zinc-400 mb-2">How to report content, challenge a restriction or request review of a velourmedia.site decision.[span_109](start_span)[span_109](end_span)</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_110](start_span)[span_110](end_span)</p>
 
       <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
-        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_115](start_span)[span_115](end_span)</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_111](start_span)[span_111](end_span)</p>
         <p className="text-sm text-zinc-200 leading-relaxed">
-          You can report content or ask us to review a decision without paying a complaint fee.[span_116](start_span)[span_116](end_span) Tell us what happened and provide enough detail to locate the issue.[span_117](start_span)[span_117](end_span)
+          You can report content or ask us to review a decision without paying a complaint fee.[span_112](start_span)[span_112](end_span) Tell us what happened and provide enough detail to locate the issue.[span_113](start_span)[span_113](end_span)
         </p>
       </div>
 
@@ -542,19 +532,19 @@ function ComplaintsDoc() {
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Send a complaint</h2>
           <p>
-            Use a content report control or email complaints@velourmedia.site.[span_118](start_span)[span_118](end_span) Include the relevant URL, purchase or account reference, a clear explanation and the email where we can reply.[span_119](start_span)[span_119](end_span)
+            Use a content report control or email complaints@velourmedia.site.[span_114](start_span)[span_114](end_span) Include the relevant URL, purchase or account reference, a clear explanation and the email where we can reply.[span_115](start_span)[span_115](end_span)
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-bold text-white mb-2">How we review</h2>
           <p>
-            We consider the information, applicable law, content rules and relevant account or provider restrictions.[span_120](start_span)[span_120](end_span) Urgent safety concerns are prioritized.[span_121](start_span)[span_121](end_span) Complaints are resolved within 5 business days.[span_122](start_span)[span_122](end_span)
+            We consider the information, applicable law, content rules and relevant account or provider restrictions.[span_116](start_span)[span_116](end_span) Urgent safety concerns are prioritized.[span_117](start_span)[span_117](end_span) Complaints are resolved within 5 business days.[span_118](start_span)[span_118](end_span)
           </p>
         </section>
 
         <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR[span_123](start_span)[span_123](end_span)</h3>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
           <p className="font-bold text-white">Velour Media</p>
           <p className="text-xs text-zinc-400">Email: complaints@velourmedia.site</p>
         </section>
@@ -563,20 +553,18 @@ function ComplaintsDoc() {
   );
 }
 
-// -----------------------------------------------------------------------------
 // 6. LAW ENFORCEMENT REQUESTS
-// -----------------------------------------------------------------------------
 function LawEnforcementDoc() {
   return (
     <article className="prose prose-invert max-w-none text-zinc-300">
       <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Law enforcement requests</h1>
-      <p className="text-sm text-zinc-400 mb-2">How authorities can submit legal-process, preservation and emergency requests to velourmedia.site.[span_124](start_span)[span_124](end_span)</p>
-      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_125](start_span)[span_125](end_span)</p>
+      <p className="text-sm text-zinc-400 mb-2">How authorities can submit legal-process, preservation and emergency requests to velourmedia.site.[span_119](start_span)[span_119](end_span)</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3[span_120](start_span)[span_120](end_span)</p>
 
       <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
-        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_126](start_span)[span_126](end_span)</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE[span_121](start_span)[span_121](end_span)</p>
         <p className="text-sm text-zinc-200 leading-relaxed">
-          We evaluate requests for user information under applicable law.[span_127](start_span)[span_127](end_span) A request should identify its legal authority, scope and the records needed.[span_128](start_span)[span_128](end_span)
+          We evaluate requests for user information under applicable law.[span_122](start_span)[span_122](end_span) A request should identify its legal authority, scope and the records needed.[span_123](start_span)[span_123](end_span)
         </p>
       </div>
 
@@ -584,12 +572,12 @@ function LawEnforcementDoc() {
         <section>
           <h2 className="text-lg font-bold text-white mb-2">Submitting a request</h2>
           <p>
-            Send requests to legal@velourmedia.site and identify the requesting agency, officer, official contact details, legal authority, relevant account/content identifiers and date range.[span_129](start_span)[span_129](end_span) Provide valid legal process where required.[span_130](start_span)[span_130](end_span)
+            Send requests to legal@velourmedia.site and identify the requesting agency, officer, official contact details, legal authority, relevant account/content identifiers and date range.[span_124](start_span)[span_124](end_span) Provide valid legal process where required.[span_125](start_span)[span_125](end_span)
           </p>
         </section>
 
         <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR[span_131](start_span)[span_131](end_span)</h3>
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
           <p className="font-bold text-white">Velour Media Legal Review</p>
           <p className="text-xs text-zinc-400">Email: legal@velourmedia.site</p>
         </section>
