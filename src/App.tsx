@@ -22,8 +22,6 @@ import { PurchaseLibrary } from './pages/PurchaseLibrary';
 import { PaymentResult } from './pages/PaymentResult';
 import { AccessPage } from './pages/AccessPage';
 import { SupportPage } from './pages/SupportPage';
-import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
-import { TermsPage } from './pages/TermsPage';
 import { LegalCenter } from './pages/LegalCenter';
 import { Loader2, Menu } from 'lucide-react';
 
@@ -72,14 +70,14 @@ function Router() {
         <ToastContainer />
         <AuthModal onNavigate={navigate} />
         <ProfileEditModal />
-      <UploadModal />
+        <UploadModal />
         <PersonaSwitcher />
         <EditPostModal />
       </>
     );
   }
 
-  const [first, second, third] = segments;
+  const [first, second] = segments;
 
   // Support page (no sidebar)
   if (first === 'support' || first === 'contact') {
@@ -91,28 +89,15 @@ function Router() {
     );
   }
 
-  // Privacy policy (no sidebar)
-  if (first === 'privacy') {
-    return (
-      <>
-        <PrivacyPolicyPage onNavigate={navigate} />
-        <ToastContainer />
-      </>
-    );
-  }
-
-  // Terms of service (no sidebar)
-  if (first === 'terms') {
-    return (
-      <>
-        <TermsPage onNavigate={navigate} />
-        <ToastContainer />
-      </>
-    );
-  }
-
-  // Legal Center (no sidebar)
-  if (first === 'legal') {
+  // Legal Center & Unified Policies (no sidebar)
+  if (
+    first === 'legal' ||
+    first === 'terms' ||
+    first === 'privacy' ||
+    first === 'refund' ||
+    first === 'refund-policy' ||
+    first === 'complaints'
+  ) {
     return (
       <>
         <LegalCenter onNavigate={navigate} />
@@ -135,17 +120,9 @@ function Router() {
   if (first === 'access') {
     const query = route.includes('?') ? route.slice(route.indexOf('?') + 1) : '';
     const accessToken = new URLSearchParams(query).get('token');
-    if (!accessToken) {
-      return (
-        <>
-          <AccessPage token="" onNavigate={navigate} />
-          <ToastContainer />
-        </>
-      );
-    }
     return (
       <>
-        <AccessPage token={accessToken} onNavigate={navigate} />
+        <AccessPage token={accessToken || ''} onNavigate={navigate} />
         <ToastContainer />
       </>
     );
@@ -184,9 +161,20 @@ function Router() {
   }
 
   const creatorSubRoutes = ['creator-profile', 'creator-analytics', 'creator-settings'];
+  const legalRoutes = ['legal', 'terms', 'privacy', 'refund', 'refund-policy', 'complaints'];
 
   // Catch-all: redirect any unrecognized route to home
-  if (first !== 'dashboard' && first !== 'home' && first !== 'wallet' && first !== 'kyc' && first !== 'refer' && first !== 'settings' && first !== 'library' && !creatorSubRoutes.includes(first)) {
+  if (
+    first !== 'dashboard' &&
+    first !== 'home' &&
+    first !== 'wallet' &&
+    first !== 'kyc' &&
+    first !== 'refer' &&
+    first !== 'settings' &&
+    first !== 'library' &&
+    !creatorSubRoutes.includes(first) &&
+    !legalRoutes.includes(first)
+  ) {
     return (
       <>
         <Landing onNavigate={navigate} />
