@@ -1,314 +1,211 @@
-import { useState, useCallback } from 'react';
-import {
-  ArrowLeft, ShieldCheck, FileText, Users, CreditCard, Lock, Flag,
-  Copy, Printer, Check, Search, Scale, AlertTriangle,
-  BookOpen, Headphones, Activity, ShoppingBag, FileWarning,
+import { useState } from 'react';
+import { 
+  Shield, 
+  ArrowLeft, 
+  Search, 
+  ArrowUpRight, 
+  FileText, 
+  Lock, 
+  Users, 
+  ShoppingBag, 
+  Scale, 
+  AlertTriangle,
+  RotateCcw,
+  CheckCircle2,
+  Mail,
+  ChevronRight
 } from 'lucide-react';
 
 interface LegalCenterProps {
-  onNavigate: (path: string) => void;
+  onNavigate?: (path: string) => void;
 }
 
-type Category = 'all' | 'accounts' | 'privacy' | 'content';
-
-interface Policy {
-  id: string;
-  title: string;
-  icon: typeof FileText;
-  category: 'accounts' | 'privacy' | 'content';
-  description: string;
-  lastUpdated: string;
-  summary: string;
-  sections: { heading: string; body: string }[];
-}
-
-const POLICIES: Policy[] = [
-  {
-    id: 'privacy',
-    title: 'Privacy Policy',
-    icon: Lock,
-    category: 'privacy',
-    description: 'How we collect, use, and protect your data.',
-    lastUpdated: 'October 10, 2026',
-    summary: 'We collect only what is needed to run the platform — email, transaction records, and device identifiers for guest access. No third-party tracking cookies. No selling your data. You can request deletion at any time.',
-    sections: [
-      { heading: 'Data We Collect', body: 'When you create an account, we store your email address, display name, and authentication credentials. When you make a purchase, we record the transaction details including the content purchased, payment amount, and payment provider reference. Guest purchasers are identified by a random anonymous device identifier stored locally in the browser — not linked to your name or email.' },
-      { heading: 'Cookies & Local Storage', body: 'We use minimal cookies for authentication sessions managed by our backend provider. We do not use third-party tracking, advertising, or analytics cookies. Guest access relies on a random identifier in local storage; clearing browser data will remove this and may result in loss of access to guest-purchased content.' },
-      { heading: 'Payment Data', body: 'All payments are processed securely through our third-party payment provider. Velour Media LLC does not store credit card details, cryptocurrency wallet addresses, or any sensitive financial information. Payment references and transaction status are stored solely to fulfill purchases and provide support.' },
-      { heading: 'No-Spam Guarantee', body: 'We will never sell, rent, or share your email address with third parties for marketing purposes. You will only receive transactional emails — payment confirmations, account security notices, and access link delivery.' },
-      { heading: 'Data Retention & Deletion', body: 'Account data is retained while your account is active. Purchase records are retained indefinitely to ensure continued access. Guest purchase data is retained for a minimum of 90 days. You can request account deletion at any time by contacting support.' },
-      { heading: 'Contact', body: 'Questions about this policy or your data rights? Email support@velourmedia.site.' },
-    ],
-  },
-  {
-    id: 'creator-terms',
-    title: 'Creator Terms',
-    icon: Users,
-    category: 'accounts',
-    description: 'Terms and obligations for creators who publish content.',
-    lastUpdated: 'October 10, 2026',
-    summary: 'Creators own 100% of their uploaded media and retain full legal liability. Velour Media LLC is a technology platform host only and assumes no liability for creator content. Creators must be 18+, hold all rights to their content, and fully indemnify the platform.',
-    sections: [
-      { heading: 'Platform Host Disclaimer', body: 'Velour Media LLC is a technology platform host only. We provide the infrastructure for creators to publish and sell digital content. We do not produce, direct, create, or own any creator-uploaded media. Independent creators retain 100% ownership of all uploaded content and assume full legal responsibility and liability for that content.' },
-      { heading: 'Creator Ownership & Liability', body: 'By uploading content, you confirm that you are the sole owner or authorized licensee of all media, that all persons depicted have provided written consent, and that the content complies with all applicable federal, state, and local laws. You agree to fully indemnify, defend, and hold harmless Velour Media LLC, its officers, directors, employees, and agents from any claims, damages, liabilities, costs, or expenses (including reasonable attorneys\' fees) arising from your content or your breach of these terms.' },
-      { heading: 'Age Requirement', body: 'You must be at least 18 years of age to create a creator account and upload content. By uploading, you confirm you are at least 18 years old and legally able to enter into binding agreements.' },
-      { heading: 'Prohibited Content', body: 'Creators must not upload content that is illegal, infringes on intellectual property, depicts minors, involves non-consensual material, violates any applicable law, or promotes violence or hatred. Velour Media LLC reserves the right to remove any content and suspend any account at its sole discretion.' },
-      { heading: 'Model Consent & Records (18 U.S.C. § 2257)', body: 'Creators are solely responsible for maintaining all required records under 18 U.S.C. § 2257 and 28 C.F.R. § 75 for any content depicting actual sexually explicit conduct. Creators must maintain records including the name and date of birth of each performer, and must make these records available upon lawful request. Velour Media LLC does not produce, manage, or possess these records.' },
-      { heading: 'Platform Fees', body: 'Velour Media LLC charges a platform fee of 30% on each transaction, deducted from the creator\'s gross earnings. Payment processing fees charged by our payment provider may also apply and are displayed at checkout. Fees may be updated with reasonable notice.' },
-      { heading: 'Payouts & Holding Period', body: 'Creator earnings are subject to a holding period before becoming available for payout. Payouts are processed via bank transfer, UPI, or cryptocurrency at the creator\'s chosen method. Minimum payout thresholds may apply.' },
-      { heading: 'Account Suspension', body: 'Velour Media LLC may suspend or terminate any creator account that violates these terms, receives valid DMCA takedown notices, or is flagged for illegal content. Suspended accounts forfeit pending earnings as liquidated damages.' },
-      { heading: 'Contact', body: 'Questions about Creator Terms? Email support@velourmedia.site.' },
-    ],
-  },
-  {
-    id: 'customer-terms',
-    title: 'Customer / Buyer Terms',
-    icon: CreditCard,
-    category: 'accounts',
-    description: 'Terms for users who purchase digital content.',
-    lastUpdated: 'October 10, 2026',
-    summary: 'All digital content sales are final and non-refundable except where required by law. Purchases grant a personal, non-transferable viewing license. Guest purchasers use a device identifier for access — create an account for permanent access.',
-    sections: [
-      { heading: 'Acceptance of Terms', body: 'By purchasing content on Velour, you agree to these Customer Terms. These terms apply to both registered users and guest purchasers. If you do not agree, you must not use the platform.' },
-      { heading: 'Age Requirement (18+)', body: 'You must be at least 18 years of age to purchase content. By making a purchase, you confirm you are at least 18 years old and legally able to enter into binding agreements.' },
-      { heading: 'Guest Checkout', body: 'Velour allows purchases without an account. A random anonymous identifier is stored in your browser\'s local storage to associate the purchase with your device. You are responsible for maintaining access to the same browser. Velour is not liable for loss of access from clearing browser data or changing devices. We recommend creating an account for permanent access.' },
-      { heading: 'Instant Digital Fulfillment', body: 'All purchases are fulfilled instantly upon payment confirmation. Access is granted immediately. Due to the nature of digital goods, all sales are final and non-refundable except where required by applicable law. If you experience technical issues accessing purchased content, contact support within 7 days.' },
-      { heading: 'Content License', body: 'When you purchase content, you receive a personal, non-transferable license to view the content for your own private use. You may not redistribute, resell, share, screenshot, or otherwise distribute purchased content. Violation may result in termination of access and legal action by the content owner.' },
-      { heading: 'Content Disclaimer', body: 'All content is created and owned by independent creators. Velour Media LLC is a platform host and does not endorse, verify, or warrant the accuracy, legality, or quality of any creator content. Any disputes about content quality or accuracy should be directed to the creator.' },
-      { heading: 'Limitation of Liability', body: 'Velour is provided "as is" without warranties of any kind. Our total liability for any claim related to your use of the platform is limited to the amount you paid for the specific transaction giving rise to the claim.' },
-      { heading: 'Contact', body: 'Questions about Customer Terms? Email support@velourmedia.site.' },
-    ],
-  },
-  {
-    id: 'dmca',
-    title: 'Copyright & DMCA Policy',
-    icon: FileWarning,
-    category: 'content',
-    description: 'How to report copyright infringement (17 U.S.C. § 512(c)(3)).',
-    lastUpdated: 'October 10, 2026',
-    summary: 'We respond to valid DMCA takedown notices. Copyright holders may submit a notice with the required elements under 17 U.S.C. § 512(c)(3). Repeat infringers will be permanently banned.',
-    sections: [
-      { heading: 'DMCA Takedown Procedure', body: 'Pursuant to 17 U.S.C. § 512(c)(3), Velour Media LLC will respond to valid DMCA takedown notices. To file a notice, you must provide the following in writing:' },
-      { heading: 'Required Notice Elements', body: '1. A physical or electronic signature of the copyright owner or an authorized agent.\n2. Identification of the copyrighted work claimed to have been infringed.\n3. Identification of the material that is claimed to be infringing, including its URL on the Velour platform.\n4. Your contact information — name, address, telephone number, and email.\n5. A statement that you have a good faith belief that the use is not authorized by the copyright owner.\n6. A statement, under penalty of perjury, that the information is accurate and that you are authorized to act on behalf of the copyright owner.' },
-      { heading: 'Where to Send', body: 'Email DMCA notices to dmca@velourmedia.site. We will process and respond to valid notices within 72 hours.' },
-      { heading: 'Counter-Notification', body: 'If your content was removed and you believe it was removed in error, you may file a counter-notification with the same required elements. Upon receipt of a valid counter-notification, we may restore the content within 10-14 business days unless the copyright owner files a court action.' },
-      { heading: 'Repeat Infringer Policy', body: 'Velour Media LLC will permanently terminate the accounts of users who are determined to be repeat copyright infringers, in accordance with 17 U.S.C. § 512(i).' },
-      { heading: 'Designated Agent', body: 'DMCA Agent for Velour Media LLC:\nEmail: dmca@velourmedia.site\nAddress: Velour Media LLC, 9465 Wilshire Blvd, Suite 300, Beverly Hills, CA 90212, USA' },
-    ],
-  },
-  {
-    id: 'report-abuse',
-    title: 'Report Abuse / Complaints',
-    icon: Flag,
-    category: 'content',
-    description: 'Report illegal content, non-consensual media, or abuse.',
-    lastUpdated: 'October 10, 2026',
-    summary: 'We take reports of illegal content, non-consensual media, and abuse seriously. Reports can be filed anonymously. Content confirmed to violate our policies will be removed and the responsible account suspended.',
-    sections: [
-      { heading: 'What to Report', body: 'Report content that is: illegal, involves minors, is non-consensual (including revenge porn), infringes copyright, promotes violence, or otherwise violates our policies.' },
-      { heading: 'How to Report', body: 'Email abuse@velourmedia.site with the URL of the content and a description of the violation. You may report anonymously. For urgent matters involving minors, contact us immediately — such content will be removed within 24 hours and reported to authorities.' },
-      { heading: 'Non-Consensual Content', body: 'Velour Media LLC has zero tolerance for non-consensual intimate imagery. If you are depicted in content without your consent, we will remove it expeditiously. Email abuse@velourmedia.site with proof of identity and the content URL.' },
-      { heading: 'Response Timeline', body: 'We review all reports within 72 hours. Content confirmed to violate our policies will be removed and the responsible account may be permanently suspended. You will receive a response to your report email.' },
-      { heading: 'False Reports', body: 'Filing false or malicious reports is a violation of our terms and may result in account suspension.' },
-    ],
-  },
-  {
-    id: 'model-consent',
-    title: 'Model Consent Rules (18 U.S.C. § 2257)',
-    icon: Scale,
-    category: 'content',
-    description: 'Record-keeping requirements for sexually explicit content.',
-    lastUpdated: 'October 10, 2026',
-    summary: 'Creators producing sexually explicit content must comply with 18 U.S.C. § 2257 record-keeping requirements. Velour Media LLC does not produce content and is not the primary or secondary producer. Creators must maintain and make available all required records.',
-    sections: [
-      { heading: 'Platform Host Status', body: 'Velour Media LLC is a technology platform that hosts third-party content. We are not a primary producer or secondary producer as defined by 18 U.S.C. § 2257(h)(2)(A)(ii) and 28 C.F.R. § 75.1(c)(2). We do not manage, create, or direct the content uploaded by creators.' },
-      { heading: 'Creator Obligations', body: 'Creators who upload sexually explicit content are solely responsible for complying with 18 U.S.C. § 2257 and 28 C.F.R. Part 75. This includes maintaining records of the name and date of birth of each performer, labeled with the content title, for inspection by the Attorney General.' },
-      { heading: 'Records Location', body: 'Each creator must maintain a designated records custodian and address where records are available for inspection. The creator must provide this information upon request by Velour Media LLC or lawful authorities.' },
-      { heading: 'Minimum Age Verification', body: 'All persons depicted in any content on the platform must be at least 18 years of age. Creators must verify and document the age of all performers before uploading. Content depicting anyone under 18 will be removed immediately and the account permanently banned, with reports filed to the National Center for Missing & Exploited Children (NCMEC).' },
-      { heading: 'Exemption Statement', body: 'Pursuant to 28 C.F.R. § 75.7, Velour Media LLC is exempt from the record-keeping and labeling requirements as a platform host that does not produce content. All record-keeping obligations rest with the individual creators who produce and upload content.' },
-      { heading: 'Contact', body: 'Questions about 2257 compliance? Email legal@velourmedia.site.' },
-    ],
-  },
-];
-
-const CATEGORIES: { value: Category; label: string }[] = [
-  { value: 'all', label: 'All policies' },
-  { value: 'accounts', label: 'Accounts & payments' },
-  { value: 'privacy', label: 'Privacy' },
-  { value: 'content', label: 'Content & safety' },
-];
+type AudienceFilter = 'everyone' | 'creators' | 'buyers';
+type CategoryFilter = 'all' | 'accounts' | 'privacy' | 'safety' | 'creators';
+type DocumentKey = 'creator-terms' | 'customer-terms' | 'privacy' | 'refund' | 'complaints' | 'law-enforcement';
 
 export function LegalCenter({ onNavigate }: LegalCenterProps) {
-  const [activeCategory, setActiveCategory] = useState<Category>('all');
+  const [selectedAudience, setSelectedAudience] = useState<AudienceFilter>('everyone');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activePolicy, setActivePolicy] = useState<Policy | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [activeDoc, setActiveDoc] = useState<DocumentKey | null>(null);
 
-  const filteredPolicies = POLICIES.filter((p) => {
-    if (activeCategory !== 'all' && p.category !== activeCategory) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return p.title.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.summary.toLowerCase().includes(q);
-    }
-    return true;
+  // Policy Directory configuration matching Unlocky Legal Center
+  const policies = [
+    {
+      key: 'customer-terms' as DocumentKey,
+      title: 'Customer terms',
+      category: 'accounts',
+      categoryLabel: 'ACCOUNTS & PAYMENTS',
+      audience: ['everyone', 'buyers'] as AudienceFilter[],
+      icon: ShoppingBag,
+      summary: 'Terms for buying digital content, payment totals, access windows, refunds and customer rights on velourmedia.site.',
+    },
+    {
+      key: 'creator-terms' as DocumentKey,
+      title: 'Creator terms',
+      category: 'creators',
+      categoryLabel: 'CREATOR PROGRAMS',
+      audience: ['everyone', 'creators'] as AudienceFilter[],
+      icon: Users,
+      summary: 'Terms for creator accounts, content ownership, sales, payment fees, payouts and use of velourmedia.site.',
+    },
+    {
+      key: 'privacy' as DocumentKey,
+      title: 'Privacy policy',
+      category: 'privacy',
+      categoryLabel: 'PRIVACY',
+      audience: ['everyone', 'creators', 'buyers'] as AudienceFilter[],
+      icon: Lock,
+      summary: 'How velourmedia.site uses account, purchase, verification and technical information, and how to make a privacy request.',
+    },
+    {
+      key: 'refund' as DocumentKey,
+      title: 'Refund Policy',
+      category: 'accounts',
+      categoryLabel: 'ACCOUNTS & PAYMENTS',
+      audience: ['everyone', 'buyers'] as AudienceFilter[],
+      icon: RotateCcw,
+      summary: 'When velourmedia.site gives refunds, how to request one and how long a refund takes.',
+    },
+    {
+      key: 'complaints' as DocumentKey,
+      title: 'Complaints and appeals',
+      category: 'safety',
+      categoryLabel: 'CONTENT & SAFETY',
+      audience: ['everyone', 'creators', 'buyers'] as AudienceFilter[],
+      icon: Scale,
+      summary: 'How to report content, challenge a restriction or request review of a velourmedia.site decision.',
+    },
+    {
+      key: 'law-enforcement' as DocumentKey,
+      title: 'Law enforcement requests',
+      category: 'safety',
+      categoryLabel: 'CONTENT & SAFETY',
+      audience: ['everyone'] as AudienceFilter[],
+      icon: AlertTriangle,
+      summary: 'How authorities can submit legal-process, preservation and emergency requests to velourmedia.site.',
+    },
+  ];
+
+  // Filtering Logic
+  const filteredPolicies = policies.filter((p) => {
+    const matchesAudience = selectedAudience === 'everyone' || p.audience.includes(selectedAudience);
+    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          p.summary.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesAudience && matchesCategory && matchesSearch;
   });
 
-  const handleCopyLink = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, []);
-
-  const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
-
-  if (activePolicy) {
-    const Icon = activePolicy.icon;
+  // Render Full Document Reader if a document is selected
+  if (activeDoc) {
     return (
-      <div className="min-h-screen bg-white dark:bg-zinc-950">
-        <header className="sticky top-0 z-40 glass border-b border-slate-200 dark:border-zinc-800/50 print:hidden">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+      <div className="min-h-screen bg-[#070b09] text-zinc-200 py-12 px-4 sm:px-6 lg:px-8 selection:bg-emerald-500 selection:text-black">
+        <div className="max-w-3xl mx-auto">
+          {/* Back button */}
+          <button
+            onClick={() => setActiveDoc(null)}
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 transition-colors mb-8"
+          >
+            <ArrowLeft size={16} /> Back to Legal Center
+          </button>
+
+          {/* Document Content Renderer */}
+          {activeDoc === 'creator-terms' && <CreatorTermsDoc />}
+          {activeDoc === 'customer-terms' && <CustomerTermsDoc />}
+          {activeDoc === 'privacy' && <PrivacyPolicyDoc />}
+          {activeDoc === 'refund' && <RefundPolicyDoc />}
+          {activeDoc === 'complaints' && <ComplaintsDoc />}
+          {activeDoc === 'law-enforcement' && <LawEnforcementDoc />}
+
+          {/* Bottom Back Button */}
+          <div className="mt-16 pt-8 border-t border-zinc-800/80 flex items-center justify-between">
             <button
-              onClick={() => setActivePolicy(null)}
-              className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+              onClick={() => setActiveDoc(null)}
+              className="px-6 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-sm font-semibold border border-zinc-800 transition-colors"
             >
-              <ArrowLeft size={16} />
-              Legal Center
+              ← All Policies
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCopyLink}
-                className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800"
-              >
-                {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                {copied ? 'Copied' : 'Copy link'}
-              </button>
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800"
-              >
-                <Printer size={14} />
-                Print
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-              <Icon size={26} className="text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{activePolicy.title}</h1>
-            <p className="text-sm text-slate-400 dark:text-zinc-500 mt-2">Last updated: {activePolicy.lastUpdated}</p>
-          </div>
-
-          <div className="rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 mb-6">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-2">At a glance</h3>
-            <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">{activePolicy.summary}</p>
-          </div>
-
-          <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700/50 p-6 sm:p-8 shadow-2xl">
-            <div className="space-y-6 text-sm leading-relaxed text-slate-700 dark:text-zinc-300">
-              {activePolicy.sections.map((section, i) => (
-                <section key={i}>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">{section.heading}</h2>
-                  <p className="whitespace-pre-line">{section.body}</p>
-                </section>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 mt-8 justify-center">
-            <button
-              onClick={handleCopyLink}
-              className="flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors px-4 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-900"
+            <a
+              href="mailto:dhakerharish10@gmail.com"
+              className="text-xs text-zinc-400 hover:text-emerald-400 transition-colors"
             >
-              {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
-              {copied ? 'Link copied' : 'Copy page link'}
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors px-4 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-900"
-            >
-              <Printer size={16} />
-              Print policy
-            </button>
+              Questions? Contact support
+            </a>
           </div>
         </div>
-
-        <LegalFooter onNavigate={onNavigate} />
       </div>
     );
   }
 
+  // ---------------- DIRECTORY VIEW (EXACT UNLOCKY SCREENSHOT MATCH) ----------------
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
-      <header className="sticky top-0 z-40 glass border-b border-slate-200 dark:border-zinc-800/50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+    <div className="min-h-screen bg-[#070b09] text-zinc-200 py-16 px-4 sm:px-6 lg:px-8 selection:bg-emerald-500 selection:text-black">
+      <div className="max-w-4xl mx-auto">
+        {/* Top Breadcrumb */}
+        {onNavigate && (
           <button
-            onClick={() => onNavigate('')}
-            className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            onClick={() => onNavigate('home')}
+            className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-emerald-400 transition-colors mb-8"
           >
-            <ArrowLeft size={16} />
-            Back to Home
+            <ArrowLeft size={14} /> Back to Velour
           </button>
-          <span className="text-lg font-bold text-slate-900 dark:text-white">Velour</span>
-        </div>
-      </header>
+        )}
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-        {/* Hero */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-4">
-            <ShieldCheck size={14} />
-            Legal Center
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Policies & Legal</h1>
-          <p className="text-sm sm:text-base text-slate-500 dark:text-zinc-400 mt-3 max-w-xl mx-auto">
-            All policies, terms, and legal resources for Velour Media LLC in one place.
+        {/* Header */}
+        <div className="mb-10">
+          <p className="text-xs font-mono uppercase tracking-widest text-emerald-400 mb-2">velourmedia.site</p>
+          <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-4">Legal center</h1>
+          <p className="text-base sm:text-lg text-zinc-400 max-w-2xl leading-relaxed">
+            Understand the terms, privacy choices and content rules that apply when you create or buy on velourmedia.site.
           </p>
         </div>
 
-        {/* Core Disclaimer */}
-        <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 p-5 mb-8">
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={20} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">Platform Host Disclaimer</h3>
-              <p className="text-xs text-amber-800 dark:text-amber-300/80 leading-relaxed">
-                Velour Media LLC is a technology platform host only. Independent creators own 100% of uploaded media and retain
-                full legal liability for their content. Velour Media LLC assumes no liability or responsibility for creator content.
-                Creators agree to fully indemnify the platform against any claims arising from their uploaded material.
-              </p>
-            </div>
-          </div>
+        {/* 1. Target Audience Tabs (Pills) */}
+        <div className="flex gap-2 p-1.5 rounded-2xl bg-zinc-950 border border-zinc-800/80 w-fit mb-6">
+          {(['everyone', 'creators', 'buyers'] as AudienceFilter[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setSelectedAudience(tab)}
+              className={`px-6 py-2 rounded-xl text-xs font-bold capitalize transition-all ${
+                selectedAudience === tab
+                  ? 'bg-[#76e05d] text-[#071306] shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
 
-        {/* Search */}
+        {/* 2. Search Input */}
         <div className="relative mb-6">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
+          <Search size={18} className="absolute left-4 top-3.5 text-zinc-500" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search policies..."
-            className="w-full rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
+            placeholder="Search policies or a topic"
+            className="w-full rounded-2xl bg-[#0c120e] border border-zinc-800/80 pl-11 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
           />
         </div>
 
-        {/* Category tabs */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          {CATEGORIES.map((cat) => (
+        {/* 3. Category Filter Chips */}
+        <div className="flex flex-wrap gap-2 mb-10 text-xs">
+          {[
+            { key: 'all', label: 'All policies' },
+            { key: 'accounts', label: 'Accounts & payments' },
+            { key: 'privacy', label: 'Privacy' },
+            { key: 'safety', label: 'Content & safety' },
+            { key: 'creators', label: 'Creator programs' },
+          ].map((cat) => (
             <button
-              key={cat.value}
-              onClick={() => setActiveCategory(cat.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeCategory === cat.value
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                  : 'bg-slate-100 dark:bg-zinc-800/50 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700/50'
+              key={cat.key}
+              onClick={() => setSelectedCategory(cat.key as CategoryFilter)}
+              className={`px-4 py-2 rounded-full border transition-all ${
+                selectedCategory === cat.key
+                  ? 'bg-zinc-800 text-white border-zinc-700'
+                  : 'bg-[#0a0f0c] text-zinc-400 border-zinc-800/80 hover:border-zinc-700'
               }`}
             >
               {cat.label}
@@ -316,92 +213,400 @@ export function LegalCenter({ onNavigate }: LegalCenterProps) {
           ))}
         </div>
 
-        {/* Policy grid */}
-        <div className="grid sm:grid-cols-2 gap-4">
-          {filteredPolicies.map((policy) => {
-            const Icon = policy.icon;
+        {/* Policy Count Subheading */}
+        <div className="flex items-center gap-3 mb-6">
+          <span className="w-6 h-[1px] bg-zinc-700" />
+          <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">
+            {filteredPolicies.length} POLICIES
+          </span>
+        </div>
+
+        {/* 4. Directory Grid Cards */}
+        <div className="grid grid-cols-1 gap-4">
+          {filteredPolicies.map((p) => {
+            const Icon = p.icon;
             return (
-              <button
-                key={policy.id}
-                onClick={() => {
-                  setActivePolicy(policy);
-                  window.scrollTo(0, 0);
-                }}
-                className="text-left rounded-2xl border border-slate-200 dark:border-zinc-700/50 bg-white dark:bg-zinc-900 p-5 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group"
+              <div
+                key={p.key}
+                onClick={() => setActiveDoc(p.key)}
+                className="group relative cursor-pointer rounded-3xl bg-[#0c130f] border border-zinc-800/80 hover:border-emerald-500/40 p-6 sm:p-7 transition-all flex flex-col justify-between"
               >
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center shrink-0 group-hover:bg-indigo-500/15 transition-colors">
-                    <Icon size={20} className="text-indigo-600 dark:text-indigo-400" />
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-emerald-400">
+                      <Icon size={16} />
+                      <span>{p.categoryLabel}</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 group-hover:border-emerald-500/40 transition-colors">
+                      <ArrowUpRight size={16} />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">{policy.title}</h3>
-                    <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">{policy.description}</p>
-                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-emerald-400 transition-colors">
+                    {p.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-2xl">
+                    {p.summary}
+                  </p>
                 </div>
-                <div className="rounded-lg bg-slate-50 dark:bg-zinc-800/30 px-3 py-2">
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed line-clamp-3">{policy.summary}</p>
+
+                <div className="mt-6 pt-4 border-t border-zinc-800/40 flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                  Read policy <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
                 </div>
-                <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-3 flex items-center gap-1.5">
-                  <FileText size={11} />
-                  Updated {policy.lastUpdated}
-                </p>
-              </button>
+              </div>
             );
           })}
         </div>
 
-        {filteredPolicies.length === 0 && (
-          <div className="text-center py-16">
-            <Search size={32} className="text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
-            <p className="text-sm text-slate-400 dark:text-zinc-500">No policies match your search.</p>
+        {/* Footer info matching Unlocky exact layout */}
+        <div className="mt-20 pt-8 border-t border-zinc-900 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold text-zinc-400">Velour Media Platform</p>
+            <p className="mt-0.5">Contact: dhakerharish10@gmail.com</p>
           </div>
-        )}
+          <p>© 2026 Velour Media. Document version 3.3</p>
+        </div>
       </div>
-
-      <LegalFooter onNavigate={onNavigate} />
     </div>
   );
 }
 
-function LegalFooter({ onNavigate }: { onNavigate: (path: string) => void }) {
-  const footerLinks = [
-    { label: 'Creator guides', icon: BookOpen, path: 'dashboard' },
-    { label: 'Contact support', icon: Headphones, path: 'support' },
-    { label: 'Service status', icon: Activity, path: 'support' },
-    { label: 'Your purchases', icon: ShoppingBag, path: 'library' },
-    { label: 'Legal center', icon: Scale, path: 'legal' },
-    { label: 'Privacy', icon: Lock, path: 'legal' },
-    { label: 'Creator terms', icon: Users, path: 'legal' },
-    { label: 'Buyer terms', icon: CreditCard, path: 'legal' },
-    { label: 'Report content', icon: Flag, path: 'support' },
-  ];
-
+// -------------------------------------------------------------------------------------------------
+// SUB-PAGE: CREATOR TERMS
+// -------------------------------------------------------------------------------------------------
+function CreatorTermsDoc() {
   return (
-    <footer className="border-t border-slate-200 dark:border-zinc-800/50 bg-slate-50 dark:bg-zinc-950 print:hidden">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
-        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 mb-8">
-          {footerLinks.map((link) => {
-            const Icon = link.icon;
-            return (
-              <button
-                key={link.label}
-                onClick={() => onNavigate(link.path)}
-                className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-              >
-                <Icon size={13} />
-                {link.label}
-              </button>
-            );
-          })}
-        </div>
+    <article className="prose prose-invert max-w-none text-zinc-300">
+      <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Creator terms</h1>
+      <p className="text-sm text-zinc-400 mb-2">Terms for creator accounts, content ownership, sales, payment fees, payouts and use of velourmedia.site.</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3</p>
 
-        <div className="text-center space-y-1">
-          <p className="text-xs text-slate-400 dark:text-zinc-500">&copy; 2026 velourmedia.site. All rights reserved.</p>
-          <p className="text-xs text-slate-400 dark:text-zinc-500">
-            Velour Media LLC &middot; 9465 Wilshire Blvd, Suite 300, Beverly Hills, Los Angeles, CA 90212, USA
-          </p>
-        </div>
+      {/* AT A GLANCE BOX */}
+      <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE</p>
+        <p className="text-sm text-zinc-200 leading-relaxed">
+          These terms govern your use of velourmedia.site as an independent creator. You keep ownership of your content and remain responsible for what you publish, how you describe it and the rights needed to sell it.
+        </p>
       </div>
-    </footer>
+
+      <div className="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Your account and eligibility</h2>
+          <p>
+            These terms are an agreement between you and Velour Media. By using the creator service, you confirm that you are at least 18, at least the age of majority where you live, have legal capacity to contract and provide accurate information.
+          </p>
+          <p className="mt-2">
+            You may maintain one account with multiple creator profiles. Protect your credentials, do not share or access another person's account, and complete required identity, payment and payout verification. Availability depends on country, provider, account approval and applicable restrictions.
+          </p>
+          <p className="mt-2">
+            Creators are independent content licensors, not employees, contractors, agents or partners of Velour Media. You are responsible for your business decisions and compliance with applicable law.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Content and licenses</h2>
+          <p>
+            You retain ownership of your content. You grant Velour Media a limited, non-exclusive, worldwide license to sell access to your content on velourmedia.site and to host, reproduce, cache, deliver, display and moderate it while operating, improving, securing and promoting the platform, and as needed for legal obligations and enforcement. Velour Media is the merchant of record for all sales. This license does not authorize selling or licensing your content outside the platform.
+          </p>
+          <p className="mt-2">
+            Velour Media provides buyers the personal, non-commercial access rights described with the purchase under your license. You must own or have permission for all content, third-party appearances and intellectual property involved. Where applicable, maintain the age and recordkeeping documentation required by 18 U.S.C. § 2257 and related law.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Content standards and moderation</h2>
+          <p>
+            Sexually explicit and adult content is prohibited under our content rules. Illegal content, exploitation, content involving minors, non-consensual material, infringement, fraud and violent extremism are prohibited. Applicable account and payment-provider restrictions also apply.
+          </p>
+          <p className="mt-2">
+            Every upload goes through automated moderation, and anything flagged receives manual review. We may hold, restrict or remove content, request evidence or suspend access. Cooperate with verification and moderation inquiries. Complaints are resolved within 5 business days through the routes described in our complaints policy.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Fees, balances and payouts</h2>
+          <p>
+            Platform fees depend on your payment setup and any account or profile rate. Applicable processing, network, payout, currency-conversion charges and taxes may also be deducted. Different payment arrangements and tips can have different rates. Your dashboard shows the applicable settings and transaction breakdown; a displayed sales price does not guarantee a fixed take-home amount.
+          </p>
+          <p className="mt-2">
+            Velour Media sells access to your licensed content and pays you your share of sales after applicable fees, taxes, refunds and adjustments. Your share may settle to an internal wallet or to a connected payment account. An internal balance is an accounting record, not a bank deposit, and earns no interest. Manual-wallet sales normally mature after a 7-day hold. Connected-provider availability and payouts follow that provider's verification, settlement and withdrawal rules.
+          </p>
+          <p className="mt-2">
+            Withdrawals depend on verification, available funds, method, minimums, fees and account status. Reserves, security holds, fraud reviews, refunds and disputes may delay or reduce funds. Refunds or chargebacks exceeding your balance may create debt recovered from future earnings. We may pause payouts for legal requirements or suspected violations.
+          </p>
+          <p className="mt-2">
+            You remain responsible for your income and other tax obligations. Transaction-tax calculation or remittance depends on the provider and configured tax treatment; do not assume every tax is handled for you.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Restrictions and account closure</h2>
+          <p>
+            You can request account deletion through account controls or support. We may restrict or terminate accounts for violations, fraud, security concerns, legal requirements or inactivity. Content may be removed, and pending payouts may be held to address lawful refunds, disputes and other obligations. Closure does not remove amounts lawfully owed or retained records.
+          </p>
+        </section>
+
+        <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
+          <p className="font-bold text-white">Velour Media</p>
+          <p className="text-xs text-zinc-400">Email: dhakerharish10@gmail.com</p>
+          <p className="text-xs text-zinc-400">Website: https://velourmedia.site</p>
+        </section>
+      </div>
+    </article>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// SUB-PAGE: CUSTOMER TERMS
+// -------------------------------------------------------------------------------------------------
+function CustomerTermsDoc() {
+  return (
+    <article className="prose prose-invert max-w-none text-zinc-300">
+      <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Customer terms</h1>
+      <p className="text-sm text-zinc-400 mb-2">Terms for buying digital content, payment totals, access windows, refunds and customer rights on velourmedia.site.</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3</p>
+
+      <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE</p>
+        <p className="text-sm text-zinc-200 leading-relaxed">
+          These terms explain your rights and responsibilities when buying access to creator content from Velour Media on velourmedia.site. Check the content description, checkout total and access terms before paying.
+        </p>
+      </div>
+
+      <div className="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">The service and your account</h2>
+          <p>
+            These terms are an agreement with Velour Media. You must be at least 18 and legally able to contract. Supply accurate details and protect account and purchase-access credentials.
+          </p>
+          <p className="mt-2">
+            Velour Media is the merchant of record for all sales. Creators license their content to Velour Media, which sells access to buyers. Creators retain ownership of their content. Payment services may have additional applicable terms.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Payments and totals</h2>
+          <p>
+            You authorize the total displayed at checkout, including any disclosed fees or taxes. Payment methods and availability vary by creator, country and provider.
+          </p>
+          <p className="mt-2">
+            Payments are handled by payment services for the relevant transaction. Access is confirmed through our payment-verification process; a pending or successful browser screen alone does not establish fulfillment. If payment appears uncertain, check its status or contact support before paying again.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">What a purchase gives you</h2>
+          <p>
+            A purchase gives you limited, non-exclusive, non-transferable access for personal, private and non-commercial use, according to the displayed purchase terms. It does not transfer copyright or permit redistribution, resale, public posting or AI-model training.
+          </p>
+          <p className="mt-2">
+            Eligible one-off paid purchases currently have a 3-hour access window beginning on first content access. The displayed checkout and access terms govern the relevant purchase. Downloading is available only where offered; retain permitted downloads before access expires. An unlock does not promise perpetual hosting or access.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Refunds and billing problems</h2>
+          <p>
+            We give refunds for duplicate charges, unresolved paid-access failures and content materially different from its description. Request a refund at dhakerharish10@gmail.com with your purchase reference, checkout email and a description of the issue. Requests are reviewed within 2 business days; approved refunds typically reach the original payment method in 5-10 business days.
+          </p>
+        </section>
+
+        <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
+          <p className="font-bold text-white">Velour Media</p>
+          <p className="text-xs text-zinc-400">Email: dhakerharish10@gmail.com</p>
+        </section>
+      </div>
+    </article>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// SUB-PAGE: PRIVACY POLICY
+// -------------------------------------------------------------------------------------------------
+function PrivacyPolicyDoc() {
+  return (
+    <article className="prose prose-invert max-w-none text-zinc-300">
+      <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Privacy policy</h1>
+      <p className="text-sm text-zinc-400 mb-2">How velourmedia.site uses account, purchase, verification and technical information, and how to make a privacy request.</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3</p>
+
+      <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE</p>
+        <p className="text-sm text-zinc-200 leading-relaxed">
+          We use information to operate your account, deliver content, process transactions and keep the service safe. This policy explains the information involved, who may receive it and the choices available to you.
+        </p>
+      </div>
+
+      <div className="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Information we use</h2>
+          <ul className="list-disc pl-5 space-y-1.5 text-zinc-400">
+            <li><strong>Account details:</strong> name, email, phone number, authentication records, language and account preferences.</li>
+            <li><strong>Creator details:</strong> public profile, social links, content, prices and account settings.</li>
+            <li><strong>Transactions:</strong> purchases, receipts, payment references, limited payment-method details, balances and payout information.</li>
+            <li><strong>Verification:</strong> identity details, documents, images, verification results and information supplied to identity or payment providers.</li>
+            <li><strong>Communications:</strong> support messages, attachments, abuse reports and related correspondence.</li>
+            <li><strong>Technical information:</strong> IP address, approximate country, device/browser information, access logs and service usage.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Why we use it</h2>
+          <p>
+            We use information to provide accounts and purchased access, process sales and payouts, verify eligibility, answer support requests, prevent fraud, investigate reports, moderate content and comply with legal obligations.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Identity and verification information</h2>
+          <p>
+            Identity providers may examine identity documents and selfies for verification. Automated moderation may assess uploaded images or video frames for unsafe content, estimated age and face matches associated with impersonation. Verification records and moderation evidence are restricted to authorized reviewers and are not public profile information.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Who may receive information</h2>
+          <p>
+            Public profile information and content previews are visible according to creator settings. We use reputable services for database hosting (Supabase), content distribution, payment processing, and transactional messaging. We do not sell personal information or share mobile numbers for third-party marketing.
+          </p>
+        </section>
+
+        <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PRIVACY CONTACT</h3>
+          <p className="font-bold text-white">Velour Media Data Desk</p>
+          <p className="text-xs text-zinc-400">Email: dhakerharish10@gmail.com</p>
+        </section>
+      </div>
+    </article>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// SUB-PAGE: REFUND POLICY
+// -------------------------------------------------------------------------------------------------
+function RefundPolicyDoc() {
+  return (
+    <article className="prose prose-invert max-w-none text-zinc-300">
+      <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Refund Policy</h1>
+      <p className="text-sm text-zinc-400 mb-2">When velourmedia.site gives refunds, how to request one and how long a refund takes.</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3</p>
+
+      <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE</p>
+        <p className="text-sm text-zinc-200 leading-relaxed">
+          Velour Media gives refunds for duplicate charges, unresolved paid-access failures and content materially different from its description. Request help at dhakerharish10@gmail.com.
+        </p>
+      </div>
+
+      <div className="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">When refunds are given</h2>
+          <p>
+            We give refunds for duplicate charges, paid-access failures that remain unresolved and content materially different from its description. Include enough information for us to verify the purchase and the problem.
+          </p>
+          <p className="mt-2">
+            Digital-content change-of-mind refunds may be limited where the law permits. This policy does not remove mandatory rights to cancellation, withdrawal, repair, replacement or refund.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">How to request a refund</h2>
+          <p>
+            Email dhakerharish10@gmail.com with the email used at checkout, your purchase reference if available, the content or checkout URL and a description of the problem. For a duplicate charge, include the dates and amounts of the charges. Do not send full card numbers, security codes or passwords.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Review and refund timing</h2>
+          <p>
+            We review refund requests within 2 business days and reply to the email you provide. Approved refunds are returned to the original payment method and typically arrive within 5-10 business days after approval.
+          </p>
+        </section>
+
+        <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
+          <p className="font-bold text-white">Velour Media</p>
+          <p className="text-xs text-zinc-400">Email: dhakerharish10@gmail.com</p>
+        </section>
+      </div>
+    </article>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// SUB-PAGE: COMPLAINTS & APPEALS
+// -------------------------------------------------------------------------------------------------
+function ComplaintsDoc() {
+  return (
+    <article className="prose prose-invert max-w-none text-zinc-300">
+      <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Complaints and appeals</h1>
+      <p className="text-sm text-zinc-400 mb-2">How to report content, challenge a restriction or request review of a velourmedia.site decision.</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3</p>
+
+      <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE</p>
+        <p className="text-sm text-zinc-200 leading-relaxed">
+          You can report content or ask us to review a decision without paying a complaint fee. Tell us what happened and provide enough detail to locate the issue.
+        </p>
+      </div>
+
+      <div className="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Send a complaint</h2>
+          <p>
+            Use a content report control or email dhakerharish10@gmail.com. Include the relevant URL, purchase or account reference, a clear explanation and the email where we can reply.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">How we review</h2>
+          <p>
+            We consider the information, applicable law, content rules and relevant account or provider restrictions. Urgent safety concerns are prioritized. Complaints are resolved within 5 business days.
+          </p>
+        </section>
+
+        <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
+          <p className="font-bold text-white">Velour Media</p>
+          <p className="text-xs text-zinc-400">Email: dhakerharish10@gmail.com</p>
+        </section>
+      </div>
+    </article>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// SUB-PAGE: LAW ENFORCEMENT REQUESTS
+// -------------------------------------------------------------------------------------------------
+function LawEnforcementDoc() {
+  return (
+    <article className="prose prose-invert max-w-none text-zinc-300">
+      <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Law enforcement requests</h1>
+      <p className="text-sm text-zinc-400 mb-2">How authorities can submit legal-process, preservation and emergency requests to velourmedia.site.</p>
+      <p className="text-xs text-zinc-500 mb-6 font-mono">Updated November 2, 2026 · Document version 3.3</p>
+
+      <div className="rounded-2xl bg-[#0f1712] border border-emerald-500/30 p-5 mb-10">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1.5">AT A GLANCE</p>
+        <p className="text-sm text-zinc-200 leading-relaxed">
+          We evaluate requests for user information under applicable law. A request should identify its legal authority, scope and the records needed.
+        </p>
+      </div>
+
+      <div className="space-y-8 text-sm leading-relaxed">
+        <section>
+          <h2 className="text-lg font-bold text-white mb-2">Submitting a request</h2>
+          <p>
+            Send requests to dhakerharish10@gmail.com and identify the requesting agency, officer, official contact details, legal authority, relevant account/content identifiers and date range. Provide valid legal process where required.
+          </p>
+        </section>
+
+        <section className="rounded-2xl bg-zinc-900/60 border border-zinc-800 p-6 mt-8">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1">PLATFORM OPERATOR</h3>
+          <p className="font-bold text-white">Velour Media Legal Review</p>
+          <p className="text-xs text-zinc-400">Email: dhakerharish10@gmail.com</p>
+        </section>
+      </div>
+    </article>
   );
 }
