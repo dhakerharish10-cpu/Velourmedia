@@ -11,7 +11,7 @@ export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
       <header className="sticky top-0 z-40 glass border-b border-slate-200 dark:border-zinc-800/50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-white">Velour</span>
+            <span className="text-lg font-bold text-white">Velour Media</span>
           </div>
           <button
             onClick={() => onNavigate('')}
@@ -30,7 +30,7 @@ export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
             <ShieldCheck size={22} className="text-emerald-600 dark:text-emerald-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">Privacy Policy</h1>
-          <p className="text-sm text-slate-400 dark:text-zinc-500 mt-1">Last updated: August 29, 2026</p>
+          <p className="text-sm text-slate-400 dark:text-zinc-500 mt-1">Last updated: November 2, 2026</p>
         </div>
 
         {/* Card */}
@@ -39,72 +39,60 @@ export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
             <section>
               <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">1. Data Collection</h2>
               <p>
-                Velour collects only the information necessary to provide our premium digital content platform.
-                When you create an account, we store your email address, display name, and account credentials.
-                When you make a purchase as a logged-in user, we record the transaction details including the
-                content purchased, payment amount, and payment provider reference. As a guest purchaser, we
-                do not collect any personal information — a random device identifier is stored locally in your
-                browser to associate your purchase without linking it to your identity.
+                Velour Media collects only the technical information required to deliver our digital creator storefront and media asset delivery services.
+                When creators register an account, we store display credentials, verified contact details, and platform preferences.
+                When a customer purchases a digital media pack, we record transaction identifiers, product references, and license access tokens. As a guest purchaser,
+                no sensitive personal profile is created — an encrypted identifier is stored locally in your browser session to fulfill immediate asset delivery.
               </p>
             </section>
 
             <section>
               <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">2. Cookie Policy</h2>
               <p>
-                Velour uses minimal cookies and local storage to operate the platform. Authentication sessions
-                are stored as cookies managed by our backend provider. We do not use third-party tracking
-                cookies, advertising cookies, or analytics cookies. No information is shared with advertising
-                networks or third-party data brokers.
+                Velour Media utilizes minimal session cookies and local browser storage essential for platform operation. Authentication sessions
+                are handled securely by our infrastructure. We do not deploy third-party advertising cookies or cross-site tracking scripts. No user data
+                is sold or distributed to third-party data brokers.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">3. LocalStorage Use for Guest Access</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">3. Local Storage for Asset Access</h2>
               <p>
-                When you make a guest purchase without creating an account, Velour generates a random,
-                anonymous device identifier and stores it in your browser's local storage. This identifier
-                allows us to associate your purchase with your browser session so you can access your
-                unlocked content. This identifier is not linked to your name, email, or any personal
-                information. Clearing your browser data will remove this identifier and may result in loss
-                of access to guest-purchased content.
+                When completing a purchase without creating a registered account, Velour Media generates a unique session token stored in your
+                browser's local storage. This allows our delivery service to confirm authorization and provide direct access to your purchased
+                digital media files. Clearing your browser cache or site data will erase this session identifier.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">4. Payment Data</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">4. Payment Processing & Security</h2>
               <p>
-                All payments are processed securely through Whop, our third-party payment provider.
-                Velour does not store your credit card details, cryptocurrency wallet addresses, or any
-                sensitive financial information. Payment references and transaction status are stored solely
-                to fulfill your purchase and provide customer support.
+                All financial transactions are handled by certified, PCI-DSS compliant third-party payment processing partners.
+                Velour Media does not collect, process, or store credit card numbers, CVVs, or sensitive banking details on its servers.
+                External processors supply secure transaction references solely used for order reconciliation and customer support verification.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">5. No-Spam Guarantee</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">5. Communication Standards</h2>
               <p>
-                We will never sell, rent, or share your email address with third parties for marketing
-                purposes. You will only receive transactional emails related to your account and purchases,
-                such as payment confirmations and account security notices. You can request deletion of
-                your account and associated data at any time by contacting our support team.
+                We do not sell or rent customer email addresses. Any communications sent are strictly transactional, such as order receipts,
+                digital file access confirmations, and security notices regarding your purchases or creator account.
               </p>
             </section>
 
             <section>
               <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">6. Data Retention</h2>
               <p>
-                Account data is retained for as long as your account is active. Purchase records are retained
-                indefinitely to ensure continued access to your purchased content. Guest purchase data is
-                retained for a minimum of 90 days to allow access to unlocked content, after which it may be
-                anonymized or removed.
+                Creator account information is retained while the storefront is active. Transaction logs and order fulfillment receipts
+                are maintained for accounting, tax compliance, and license validation purposes.
               </p>
             </section>
 
             <section>
               <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">7. Contact</h2>
               <p>
-                If you have questions about this Privacy Policy or wish to exercise your data rights, please
-                contact us at{' '}
+                For privacy questions, access inquiries, or account data deletion requests, contact our privacy team at{' '}
                 <a href="mailto:support@velourmedia.site" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-300 transition-colors">
                   support@velourmedia.site
                 </a>
