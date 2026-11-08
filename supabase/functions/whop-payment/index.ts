@@ -111,9 +111,9 @@ async function sendSaleAlertEmail(
         </div>
         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-top: 16px;">
           <table style="width: 100%; font-size: 14px; color: #334155;">
-            <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${grossAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (30%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-${(Number(grossAmount) - Number(netAmount)).toFixed(2)}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (70%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">${netAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">$${grossAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (30%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-$${(Number(grossAmount) - Number(netAmount)).toFixed(2)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (70%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">$${netAmount}</td></tr>
             <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
           </table>
           <a href="${dashboardLink}" style="display: inline-block; margin-top: 20px; padding: 12px 28px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 14px;">Go to Dashboard</a>
@@ -148,11 +148,7 @@ async function sendSaleAlertEmail(
 }
 
 function extractNetAmount(payment: JsonRecord): number {
-  // Extract the net amount Whop received after their internal fee deductions
-  // v5 API: net_amount is in cents, gross_amount is in cents
-  // v1 API: net_amount may be in dollars, net_cents in cents
   if (typeof payment.net_amount === "number" && payment.net_amount > 0) {
-    // v5 returns cents; v1 may return dollars — detect based on magnitude
     return payment.net_amount > 1000 ? payment.net_amount / 100 : payment.net_amount;
   }
   if (typeof payment.net_cents === "number" && payment.net_cents > 0) return payment.net_cents / 100;
@@ -163,7 +159,6 @@ function extractNetAmount(payment: JsonRecord): number {
     }
     if (typeof data.net_cents === "number" && data.net_cents > 0) return data.net_cents / 100;
   }
-  // Fallback: use gross amounts (less ideal since this is pre-fee)
   if (typeof payment.gross_amount === "number" && payment.gross_amount > 0) {
     return payment.gross_amount > 1000 ? payment.gross_amount / 100 : payment.gross_amount;
   }
@@ -178,14 +173,12 @@ function extractNetAmount(payment: JsonRecord): number {
   return 0;
 }
 
-// Hybrid attribution: metadata-first (strict), plan_id/product_id fallback ONLY for historical payments with no metadata
 async function resolveAttribution(
   supabase: ReturnType<typeof getServiceClient>,
   payment: JsonRecord,
 ): Promise<{ creator_id: string | null; content_id: string | null }> {
   const metadata = (payment.metadata ?? {}) as JsonRecord;
 
-  // STEP 1 (PRIMARY): Strict metadata attribution — handles all NEW sales with 100% accuracy
   const customPostId = typeof metadata.custom_post_id === "string" ? metadata.custom_post_id : null;
   const customCreatorId = typeof metadata.custom_creator_id === "string" ? metadata.custom_creator_id : null;
   if (customPostId && customCreatorId) {
@@ -197,14 +190,11 @@ async function resolveAttribution(
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
 
-  // STEP 2 (HISTORICAL FALLBACK): ONLY if metadata is completely empty — for past payments created before the metadata engine
   const hasMetadata = Object.keys(metadata).length > 0;
   if (hasMetadata) {
-    // Metadata exists but doesn't contain our IDs — don't guess, skip
     return { creator_id: metaCreatorId, content_id: metaContentId };
   }
 
-  // No metadata at all — try plan_id lookup against content.whop_plan_id
   const planId = typeof payment.plan_id === "string" ? payment.plan_id
     : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
     : null;
@@ -219,7 +209,6 @@ async function resolveAttribution(
     }
   }
 
-  // Try product_id lookup against content.whop_product_id
   const productId = typeof payment.product_id === "string" ? payment.product_id
     : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
     : null;
@@ -245,12 +234,10 @@ async function activatePurchase(
   buyerEmail?: string | null,
   whopNetAmount?: number,
 ): Promise<boolean> {
-  // Use the Whop net_amount if available, otherwise fall back to the intent amount
   const baseAmount = whopNetAmount && whopNetAmount > 0 ? whopNetAmount : Number(intent.amount);
   const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
   const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
 
-  // Save to transactions table with creator_earnings and platform_earnings
   const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : null;
   const contentId = typeof intent.content_id === "string" ? intent.content_id : null;
   if (paymentId && creatorId) {
@@ -334,13 +321,13 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   if (creatorError || !creator) return json({ error: "Creator not found." }, 404);
 
   let amount = 0;
-  let description = `Tip to ${creator.display_name || creator.username}`;
+  let description = "Creator Support Contribution";
   if (checkoutType === "tip") {
     amount = tipAmount!;
   } else {
     const { data: content } = await supabase
       .from("content")
-      .select("id, title, price, creator_id")
+      .select("id, title, billing_title, price, creator_id")
       .eq("id", contentId)
       .eq("creator_id", creatorId)
       .eq("is_published", true)
@@ -356,7 +343,10 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       if (owned) return json({ error: "You already own this content." }, 409);
     }
     amount = Number(content.price);
-    description = content.title;
+    // Neutral compliant title Whop ke liye:
+    description = (typeof content.billing_title === "string" && content.billing_title.trim().length > 0)
+      ? content.billing_title
+      : `Digital Creator Asset #${contentId.slice(0, 6).toUpperCase()}`;
   }
   if (!contentId) return json({ error: "Content is required." }, 400);
 
@@ -378,7 +368,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   const successUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}?payment_status=success`;
   const cancelUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}`;
 
-  // Fetch the content's whop_plan_id and whop_product_id — used for direct purchase_url fallbacks
   let existingPlanId: string | null = null;
   let existingProductId: string | null = null;
   let existingPurchaseUrl: string | null = null;
@@ -392,7 +381,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     existingProductId = typeof contentRow?.whop_product_id === "string" ? contentRow.whop_product_id : null;
   }
 
-  // Create a Whop checkout configuration with an inline plan
   const planType = "one_time";
   const whopPayload: JsonRecord = {
     metadata: {
@@ -445,9 +433,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     checkoutResult = {};
   }
 
-  // Parse the checkout URL from the response — Whop v1 returns redirect_url
-  // Per docs, redirect_url is a relative path like "/checkout/ch_xxxx/"
-  // We must prepend the Whop base domain to get a usable absolute URL
   let rawCheckoutUrl = typeof checkoutResult.redirect_url === "string"
     ? checkoutResult.redirect_url
     : typeof checkoutResult.purchase_url === "string"
@@ -456,7 +441,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
         ? checkoutResult.url
         : "";
 
-  // Normalize to an absolute URL — Whop returns relative paths like "/checkout/ch_xxx/"
   let checkoutUrl = "";
   if (rawCheckoutUrl) {
     if (rawCheckoutUrl.startsWith("http://") || rawCheckoutUrl.startsWith("https://")) {
@@ -478,7 +462,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
           : `Whop returned ${checkoutResponse.status}: ${checkoutText.slice(0, 500)}`;
     console.error("[whop] checkout creation failed", { status: checkoutResponse?.status, apiMessage, checkoutResult, requestPayload: whopPayload });
 
-    // FALLBACK: Construct a direct Whop checkout URL with metadata params
     const fallbackId = existingPlanId ?? existingProductId;
     if (fallbackId) {
       existingPurchaseUrl = `https://whop.com/checkout/${fallbackId}`;
@@ -501,7 +484,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
 
   if (!checkoutUrl) {
     console.error("[whop] no checkout URL in response", checkoutResult);
-    // Last-resort fallback: try direct plan/product purchase URL
     const fallbackId = existingPlanId ?? existingProductId;
     if (fallbackId) {
       const metaParams = new URLSearchParams({
@@ -521,7 +503,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     }
   }
 
-  // Store the checkout intent in the database (reusing the nowpayments_checkout_intents table)
   const insertResult = await supabase.from("nowpayments_checkout_intents").insert({
     order_id: orderId,
     buyer_id: user ? user.id : null,
@@ -558,18 +539,15 @@ async function confirmPayment(req: Request, orderId: string): Promise<Response> 
 
   const intentRecord = intent as JsonRecord;
 
-  // If already confirmed, just return success
   if (intentRecord.status === "confirmed") {
     return json({ order_id: orderId, status: "confirmed", content_id: intentRecord.content_id, creator_id: intentRecord.creator_id, already_confirmed: true });
   }
 
-  // Authenticate the buyer
   if (intentRecord.buyer_id) {
     const user = await requireUser(req);
     if (!user || user.id !== intentRecord.buyer_id) return json({ error: "Authentication required." }, 401);
   }
 
-  // Force-confirm the intent and activate the purchase (fallback for webhook delays)
   const paymentId = typeof intentRecord.payment_id === "string" ? intentRecord.payment_id : `fallback_${orderId}`;
   const buyerEmail = typeof req.headers.get("X-Buyer-Email") === "string" ? req.headers.get("X-Buyer-Email") : null;
 
@@ -611,7 +589,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
 
   const supabase = getServiceClient();
 
-  // Resolve the primary active creator for historical payments that have no metadata and no plan_id match
   const { data: primaryCreator } = await supabase
     .from("profiles")
     .select("id, username")
@@ -629,7 +606,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
   let hasMore = true;
 
   while (hasMore && page <= 20) {
-    // v5 API supports status=succeeded filter directly
     const params = new URLSearchParams({ per: "100", page: String(page), status: "succeeded" });
     if (companyId) params.set("company_id", companyId);
     const url = `${WHOP_API_BASE}/payments?${params.toString()}`;
@@ -649,7 +625,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
     console.log("[whop] sync page", page, "got", payments.length, "payments");
 
     for (const payment of payments) {
-      // v5 API already filters by status=succeeded, but double-check
       const paymentStatus = typeof payment.status === "string" ? payment.status : "";
       if (!["succeeded", "paid", "complete", "completed"].includes(paymentStatus)) {
         skipped++;
@@ -659,9 +634,7 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       const paymentId = typeof payment.id === "string" ? payment.id : null;
       if (!paymentId) { skipped++; continue; }
 
-      // Extract the Whop net amount (after Whop's internal fees)
       const netAmount = extractNetAmount(payment);
-      // Fall back to gross amount extraction if net_amount not present
       const totalCents = typeof payment.total_cents === "number" ? payment.total_cents
         : typeof payment.subtotal_cents === "number" ? payment.subtotal_cents
         : typeof payment.final_amount === "number" ? payment.final_amount * 100
@@ -677,7 +650,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       const metadata = (payment.metadata ?? {}) as JsonRecord;
       const orderId = typeof metadata.order_id === "string" ? metadata.order_id : null;
 
-      // --- Path 1: We have a matching checkout intent ---
       if (orderId) {
         const { data: intent } = await supabase
           .from("nowpayments_checkout_intents")
@@ -703,16 +675,13 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         }
       }
 
-      // --- Path 2: Historical payment with no intent — write directly to transactions table ---
       if (baseAmount <= 0) { skipped++; continue; }
 
-      // Resolve creator_id and content_id: metadata-first, plan_id/product_id fallback, then primary creator
       const attribution = await resolveAttribution(supabase, payment);
       const creatorId = attribution.creator_id ?? primaryCreatorId;
 
       if (!creatorId) { skipped++; continue; }
 
-      // Check if already synced by payment_id
       const { data: existing } = await supabase
         .from("transactions")
         .select("id")
@@ -723,7 +692,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
       const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
 
-      // Upsert into transactions table with creator_earnings and platform_earnings
       await supabase.from("transactions").insert({
         payment_id: paymentId,
         order_id: orderId ?? paymentId,
@@ -740,7 +708,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         raw_payload: payment,
       });
 
-      // Also upsert into purchases table so it shows in the admin panel
       if (attribution.content_id) {
         await supabase.from("purchases").upsert({
           buyer_id: null,
