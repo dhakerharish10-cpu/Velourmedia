@@ -37,9 +37,7 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
     <header className="sticky top-0 z-50 glass border-b border-slate-200 dark:border-zinc-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
         <button onClick={() => handleNav('')} className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center">
-            <Sparkles size={18} className="text-white" />
-          </div>
+          <img src="/logo.svg" alt="Velour" className="w-9 h-9 rounded-xl object-contain" />
           <span className="font-bold text-lg text-slate-900 dark:text-white tracking-tight">Velour</span>
         </button>
 
