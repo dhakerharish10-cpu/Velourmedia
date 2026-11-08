@@ -113,7 +113,7 @@ export function Landing({ onNavigate }: LandingProps) {
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
       <Navbar onNavigate={onNavigate} currentPath="" />
 
-      {/* ---------------- 01. HERO SECTION (NO 18+ BADGES) ---------------- */}
+      {/* ---------------- 01. HERO SECTION (NO Verified BADGES) ---------------- */}
       <section className="relative overflow-hidden pt-28 pb-20 px-4 sm:px-6 lg:px-8 border-b border-zinc-900">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-indigo-500/15 via-purple-500/5 to-transparent rounded-full blur-[140px] pointer-events-none" />
 

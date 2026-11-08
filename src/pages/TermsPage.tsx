@@ -46,7 +46,7 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">2. Age Requirement (18+)</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">2. Age Requirement (Verified)</h2>
               <p>
                 You must be at least 18 years of age to use Velour. By creating an account or making a guest
                 purchase, you confirm that you are at least 18 years old and legally able to enter into
