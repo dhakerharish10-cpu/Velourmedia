@@ -11,7 +11,7 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
       <header className="sticky top-0 z-40 glass border-b border-slate-200 dark:border-zinc-800/50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-white">Velour</span>
+            <span className="text-lg font-bold text-white">Velour Media</span>
           </div>
           <button
             onClick={() => onNavigate('')}
@@ -30,7 +30,7 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
             <FileText size={22} className="text-emerald-600 dark:text-emerald-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">Terms of Service</h1>
-          <p className="text-sm text-slate-400 dark:text-zinc-500 mt-1">Last updated: August 29, 2026</p>
+          <p className="text-sm text-slate-400 dark:text-zinc-500 mt-1">Last updated: November 2, 2026</p>
         </div>
 
         {/* Card */}
@@ -39,90 +39,57 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
             <section>
               <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">1. Acceptance of Terms</h2>
               <p>
-                By accessing or using Velour, you agree to be bound by these Terms of Service. If you do not
-                agree with any part of these terms, you must not use our platform. These terms apply to both
-                registered users and guest purchasers.
+                By accessing or using Velour Media (velourmedia.site), you agree to be bound by these Terms of Service. If you do not
+                agree with any part of these terms, you must not use our platform. These terms apply to registered creators and digital asset purchasers.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">2. Age Requirement (Verified)</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">2. Eligibility & Age Requirement</h2>
               <p>
-                You must be at least 18 years of age to use Velour. By creating an account or making a guest
-                purchase, you confirm that you are at least 18 years old and legally able to enter into
-                binding agreements. Content on this platform may include adult material. Minors are strictly
-                prohibited from accessing the platform.
+                You must be at least 18 years of age (or the age of legal majority in your jurisdiction) to use Velour Media. By creating an account or completing a digital purchase, you confirm that you have the legal capacity to enter into binding agreements. All users and creators must comply with applicable local and international commerce laws.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">3. Guest Digital Content Purchases</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">3. Acceptable Content & Community Standards</h2>
               <p>
-                Velour allows users to purchase premium digital content without creating an account (guest
-                checkout). When you make a guest purchase, a random anonymous identifier is stored in your
-                browser's local storage to associate the purchase with your device. You are responsible for
-                maintaining access to the same browser to retain access to your purchased content. Velour is
-                not liable for loss of access resulting from clearing browser data, changing devices, or
-                other actions that remove the local storage identifier. We recommend creating an account for
-                permanent access to your purchases.
+                Velour Media is dedicated to legitimate creative media asset distribution. Sexually explicit material, adult entertainment content, hate speech, harassment, copyright infringement, and unlawful media are strictly prohibited on the platform. Any creator accounts found violating these standards are subject to immediate termination and forfeiture of access.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">4. Instant Digital Fulfillment</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">4. Digital Product Fulfillment & Access</h2>
               <p>
-                All digital content purchases on Velour are fulfilled instantly upon payment confirmation.
-                Once your payment is confirmed by our payment provider, access to the purchased content is
-                granted immediately. Due to the nature of digital goods, all sales are final and non-refundable
-                except where required by applicable law. If you experience a technical issue accessing
-                purchased content, please contact support within 7 days of purchase for assistance.
+                Velour Media provides creator storefront tools for digital goods (photography packs, presets, audio stems, digital documents, and video productions). All digital purchases are fulfilled electronically and instantly upon payment confirmation. When making a guest purchase, an encrypted session token is stored in local storage to identify your access.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">5. Content Ownership &amp; Licensing</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">5. Refund Policy for Electronic Goods</h2>
               <p>
-                All content on Velour is owned by the respective creators. When you purchase content, you
-                receive a personal, non-transferable license to view the content for your own private use.
-                You may not redistribute, resell, share, or otherwise distribute purchased content. Violation
-                of these terms may result in termination of access and legal action by the content owner.
+                Due to the immediate access nature of downloadable and viewable digital media assets, all sales are typically final once accessed, except where mandatory consumer law requires otherwise. We issue full refunds for confirmed technical delivery failures, duplicate billing, or media files that are corrupted or materially defective. Contact support@velourmedia.site within 7 days of purchase for billing resolution.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">6. Creator Responsibilities</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">6. Intellectual Property & Licensing</h2>
               <p>
-                Creators are solely responsible for the content they upload and must ensure they hold all
-                necessary rights and permissions. Creators must not upload content that is illegal, infringes
-                on intellectual property, or violates any applicable laws. Velour reserves the right to remove
-                content and suspend accounts that violate these terms.
+                Creators retain all proprietary ownership and copyright to their uploaded media. When a customer purchases access to a media pack, they receive a personal, revocable, non-exclusive license to view or download the assets for private, non-commercial use. Redistribution, resale, or unauthorized sublicensing is strictly prohibited.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">7. Platform Fees</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">7. Platform Fees & Payouts</h2>
               <p>
-                Velour charges a platform fee on each transaction, which is deducted from the creator's
-                earnings. The current fee percentage is displayed in the creator dashboard. Fees may be
-                updated with reasonable notice. Payment processing fees charged by our payment provider may
-                also apply and are displayed at checkout.
+                Velour Media retains an agreed platform service fee per successful transaction. Net proceeds are credited to the creator wallet balance. Payout disbursements require standard merchant identity verification and compliance with payout provider terms.
               </p>
             </section>
 
             <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">8. Limitation of Liability</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">8. Contact Information</h2>
               <p>
-                Velour is provided "as is" without warranties of any kind. We are not liable for indirect,
-                incidental, or consequential damages arising from the use of our platform. Our total
-                liability for any claim related to your use of the platform is limited to the amount you
-                paid for the specific transaction giving rise to the claim.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">9. Contact</h2>
-              <p>
-                If you have questions about these Terms of Service, please contact us at{' '}
+                For legal inquiries, dispute resolutions, or technical billing assistance, contact our administrative support team at{' '}
                 <a href="mailto:support@velourmedia.site" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-300 transition-colors">
                   support@velourmedia.site
                 </a>
