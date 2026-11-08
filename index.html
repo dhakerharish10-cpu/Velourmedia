@@ -1,28 +1,40 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <meta name="theme-color" content="#08080a" />
-    <title>Velour — Premium Creator Content</title>
-    <meta name="description" content="A premium platform for creators to monetize exclusive content. Upload, price, and sell your work directly to your audience." />
-    <meta property="og:title" content="Velour — Premium Creator Content" />
-    <meta property="og:description" content="A premium platform for creators to monetize exclusive content." />
+    <meta name="theme-color" content="#090d16" />
+
+    <!-- Creator-Owned Digital Storefront Meta -->
+    <title>Velour Media | Creator Storefront & Digital Asset Distribution</title>
+    <meta name="title" content="Velour Media | Creator Storefront & Digital Asset Distribution" />
+    <meta name="description" content="Velour Media is an independent creator monetization platform that lets creators sell digital products, photography sets, presets, audio packs, and video productions directly to their audience." />
+    
+    <!-- Open Graph / Social Sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://velourmedia.site/" />
+    <meta property="og:title" content="Velour Media | Creator Storefront & Digital Media Distribution" />
+    <meta property="og:description" content="Independent storefront platform for creators to distribute original media packs, photo collections, and digital downloads directly." />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=80" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Velour Media | Creator Storefront" />
+    <meta name="twitter:description" content="Distribute original digital assets, media packs, and creative tools directly." />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=80" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <meta property="og:image" content="https://bolt.new/static/og_default.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
-  <link rel="apple-touch-icon" href="/logo.svg" />
-</head>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="apple-touch-icon" href="/logo.svg" />
+  </head>
   <body>
     <script>
       (function() {
         try {
           var t = localStorage.getItem('velour-theme');
-          if (t === 'dark') document.documentElement.classList.add('dark');
+          if (t === 'dark' || !t) document.documentElement.classList.add('dark');
         } catch(e) {}
       })();
     </script>
