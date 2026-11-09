@@ -376,14 +376,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Auto-bypass age gate when signed in
   useEffect(() => {
     if (user) {
       setIsAgeVerified(true);
     }
   }, [user]);
 
-  // Load profile + content when user or activeProfileId changes
   useEffect(() => {
     if (user) {
       refreshProfile();
@@ -410,7 +408,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [user, activeProfileId, refreshProfile, refreshProfiles, refreshMyContent, refreshPurchases, refreshEarnings, refreshBalances, refreshBankDetails, refreshPayouts, refreshPlatformSettings, refreshSalesVisibility]);
 
-  // Load feed on mount
   useEffect(() => {
     refreshFeed();
   }, [refreshFeed]);
@@ -457,7 +454,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setIsAdminEmail(false);
   }, []);
 
-  // Direct checkout delegation (handled via edge function & webhook)
   const purchaseContent = useCallback(async (contentId: string, _amount: number) => {
     if (!user) return { error: 'You must be signed in to purchase.' };
     await handlePayment(contentId, '');
@@ -465,20 +461,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const recordPurchase = useCallback(async (_contentId: string, _amount: number, _paymentId: string) => {
-    // Purchases are verified and created server-side via whop-webhook
     await refreshPurchases();
     await refreshFeed();
     return { error: null };
   }, [refreshPurchases, refreshFeed]);
 
-  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
+  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
     setIsRedirecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { content_id: contentId },
+      const { data, error } = await supabase.functions.invoke('whop-payment', {
+        body: { contentId, creatorId },
       });
-      if (error || !data?.url) throw new Error('Unable to start checkout. Please try again.');
-      window.location.href = data.url;
+      const checkoutUrl = data?.url || data?.invoice_url;
+      if (error || !checkoutUrl) throw new Error('Unable to start checkout. Please try again.');
+      window.location.href = checkoutUrl;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
       addToast(message, 'error');
@@ -490,21 +486,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  // Connect tips directly to the active create-checkout edge function
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
     setIsRedirecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
+      const { data, error } = await supabase.functions.invoke('whop-payment', {
         body: {
-          type: 'tip',
-          creator_id: creatorId,
-          content_id: contentId,
-          amount: Math.round(tipAmount * 100),
-          title: 'Creator Support Contribution',
+          creatorId,
+          contentId,
+          tipAmount,
+          isTip: true,
         },
       });
-      if (error || !data?.url) throw new Error('Unable to start tip checkout. Please try again.');
-      window.location.href = data.url;
+      const checkoutUrl = data?.url || data?.invoice_url;
+      if (error || !checkoutUrl) throw new Error('Unable to start tip checkout. Please try again.');
+      window.location.href = checkoutUrl;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start tip checkout. Please try again.';
       addToast(message, 'error');
