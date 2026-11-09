@@ -96,7 +96,7 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 async function loadCreators(ids: Array<string | null | undefined>): Promise> {
-  const unique = Array.from(new Set(ids.filter((id): id is string => !!id)));
+  const unique = Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
   const map = new Map<string, Profile>();
   if (unique.length === 0) return map;
   const { data, error } = await supabase.from('profiles').select('*').in('id', unique);
@@ -356,23 +356,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsAdminEmail(isAdminEmailCheck(session?.user?.email));
+      setSession(s);
+      setUser(s?.user ?? null);
+      setIsAdminEmail(isAdminEmailCheck(s?.user?.email));
       setLoading(false);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsAdminEmail(isAdminEmailCheck(session?.user?.email));
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+      setIsAdminEmail(isAdminEmailCheck(s?.user?.email));
       setLoading(false);
     });
 
     return () => {
       mounted = false;
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
@@ -454,18 +455,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setIsAdminEmail(false);
   }, []);
 
-  const purchaseContent = useCallback(async (contentId: string, _amount: number) => {
-    if (!user) return { error: 'You must be signed in to purchase.' };
-    await handlePayment(contentId, '');
-    return { error: null };
-  }, [user]);
-
-  const recordPurchase = useCallback(async (_contentId: string, _amount: number, _paymentId: string) => {
-    await refreshPurchases();
-    await refreshFeed();
-    return { error: null };
-  }, [refreshPurchases, refreshFeed]);
-
   const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
     setIsRedirecting(true);
     try {
@@ -481,6 +470,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setIsRedirecting(false);
     }
   }, [addToast]);
+
+  const purchaseContent = useCallback(async (contentId: string, _amount: number) => {
+    if (!user) return { error: 'You must be signed in to purchase.' };
+    await handlePayment(contentId, '');
+    return { error: null };
+  }, [user, handlePayment]);
+
+  const recordPurchase = useCallback(async (_contentId: string, _amount: number, _paymentId: string) => {
+    await refreshPurchases();
+    await refreshFeed();
+    return { error: null };
+  }, [refreshPurchases, refreshFeed]);
 
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
