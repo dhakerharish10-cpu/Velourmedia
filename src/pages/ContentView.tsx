@@ -36,7 +36,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const currentContentIdRef = useRef(contentId);
   currentContentIdRef.current = contentId;
 
-  // Moving to a different post must never show the previous post's unlocked media
   useEffect(() => {
     setUnlockedMedia(null);
     setMediaItems([]);
@@ -48,7 +47,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const isFree = content ? Number(content.price) <= 0 : false;
   const hasAccess = isOwned || isFree || !!unlockedMedia;
 
-  // Whop sends the buyer back here with ?paid=1 after checkout
   const returnedFromCheckout =
     typeof window !== 'undefined' && window.location.href.includes('paid=1');
 
@@ -83,12 +81,25 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
       let creatorData = null;
       if (contentData.creator_id) {
+        // ID se creator fetch karein
         const { data: pData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', contentData.creator_id)
           .maybeSingle();
         creatorData = pData;
+      }
+
+      // Agar ID se nahi mila toh profile owner_id se try karein
+      if (!creatorData && contentData.creator_id) {
+        const { data: fallbackProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('owner_id', contentData.creator_id)
+          .order('is_primary', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        creatorData = fallbackProfile;
       }
 
       setContent({
@@ -123,17 +134,13 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     }
   }, [user, refreshPurchases]);
 
-  // Ask the server for signed URLs. It allows: free posts, the creator, a logged-in buyer,
-  // or a guest whose browser holds the claim secret saved at checkout.
   const loadUnlockedMedia = useCallback(async (): Promise<boolean> => {
     let claim = '';
-    try { claim = localStorage.getItem(`claim:${contentId}`) ?? ''; } catch { /* storage unavailable */ }
-    // Logged out and no purchase claim saved in this browser: nothing to prove, skip the server call
+    try { claim = localStorage.getItem(`claim:${contentId}`) ?? ''; } catch { }
     if (!user && !claim) return false;
     const { data, error } = await supabase.functions.invoke('get-media', {
       body: { content_id: contentId, claim },
     });
-    // The visitor may have moved to another post while this request was running
     if (currentContentIdRef.current !== contentId) return false;
     if (error || !data?.media?.length) return false;
     setUnlockedMedia(data.media as { url: string; type: 'image' | 'video' }[]);
@@ -143,13 +150,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const isPaidPost = !!content && Number(content.price) > 0;
   const isPrivatePaid = isPaidPost && !/^https?:\/\//i.test(content?.media_url ?? '');
 
-  // Paid post: check access when the page opens or the login/purchase state changes
   useEffect(() => {
     if (!content || !isPaidPost || unlockedMedia) return;
     loadUnlockedMedia();
   }, [content, isPaidPost, unlockedMedia, user, isOwned, loadUnlockedMedia]);
 
-  // Back from checkout: the webhook writes the purchase a few seconds after payment, so retry for ~40s
   useEffect(() => {
     if (!content || !returnedFromCheckout || unlockedMedia) return;
     let tries = 0;
@@ -166,14 +171,12 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     if ((isOwned || unlockedMedia) && returnedFromCheckout) setJustPurchased(true);
   }, [isOwned, unlockedMedia, returnedFromCheckout]);
 
-  // Signed URLs last 30 minutes: refresh them before they expire
   useEffect(() => {
     if (!unlockedMedia || !isPaidPost) return;
     const t = setInterval(() => { loadUnlockedMedia(); }, 25 * 60 * 1000);
     return () => clearInterval(t);
   }, [unlockedMedia, isPaidPost, loadUnlockedMedia]);
 
-  // Coming back from Whop with the browser's Back button must not leave the button stuck
   useEffect(() => {
     const onShow = (e: PageTransitionEvent) => { if (e.persisted) setIsRedirecting(false); };
     window.addEventListener('pageshow', onShow);
@@ -184,12 +187,9 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
     : content ? [{ url: content.media_url, type: content.media_type }] : [];
 
-  // What the unlocked viewer shows: signed URLs for paid posts, the public URLs for free ones
   const shownMedia = unlockedMedia ?? (isPrivatePaid ? [] : allMedia);
-  // What the locked view shows: private posts only expose their tiny public preview
   const previewMedia: { url: string; type: 'image' | 'video' }[] = isPrivatePaid
     ? (() => {
-        // One tiny public preview per uploaded file (content_media.preview_url)
         const perFile = mediaItems
           .map((m) => (m as ContentMedia & { preview_url?: string | null }).preview_url)
           .filter((u): u is string => !!u)
@@ -222,12 +222,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         try {
           const body = await (error as any)?.context?.json?.();
           reason = body?.detail || body?.error || '';
-        } catch { /* ignore */ }
+        } catch { }
         throw new Error(reason || 'Unable to start checkout. Please try again.');
       }
-      // Guests: keep the private claim secret so this browser can unlock after paying
       if (data.claim) {
-        try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { /* storage unavailable */ }
+        try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { }
       }
       window.location.href = data.url;
     } catch (err) {
@@ -255,7 +254,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button
           onClick={() => onNavigate('')}
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-slate-900 dark:text-white transition-colors mb-6"
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition-colors mb-6"
         >
           <ArrowLeft size={16} />
           Back
@@ -277,9 +276,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             </button>
           </div>
         ) : hasAccess ? (
-          /* ---- UNLOCKED VIEW ---- */
           <div className="space-y-4">
-            {/* Post-purchase confirmation header */}
             {justPurchased && (
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4 flex items-center gap-3 animate-fade-in">
                 <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
@@ -342,23 +339,15 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </>
               )}
 
-              {/* Protection badge */}
               <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 text-xs text-white pointer-events-none">
                 <Lock size={10} />
                 <span className="font-medium">Protected Content</span>
               </div>
 
-              {/* Dynamic watermark overlay */}
               {user?.email && (
                 <>
                   <div className="absolute inset-0 pointer-events-none overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-20deg] text-white/10 text-2xl font-bold whitespace-nowrap select-none">
-                      {maskEmail(user.email)}
-                    </div>
-                    <div className="absolute top-[20%] left-[10%] rotate-[-20deg] text-white/[0.07] text-lg font-semibold whitespace-nowrap select-none">
-                      {maskEmail(user.email)}
-                    </div>
-                    <div className="absolute bottom-[20%] right-[10%] rotate-[-20deg] text-white/[0.07] text-lg font-semibold whitespace-nowrap select-none">
                       {maskEmail(user.email)}
                     </div>
                   </div>
@@ -369,7 +358,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               )}
             </div>
 
-            {/* Info card */}
             <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 mb-2">
                 {content.media_type === 'image' ? <ImageIcon size={12} /> : <Video size={12} />}
@@ -385,7 +373,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
                 className="text-sm text-indigo-600 hover:text-indigo-500 mt-1"
               >
-                by {content.creator?.display_name || content.creator?.username || 'Unknown'}
+                by {content.creator?.display_name || content.creator?.username || 'Creator'}
               </button>
               {content.description && (
                 <p className="text-sm text-slate-600 dark:text-zinc-300 mt-3 leading-relaxed">{content.description}</p>
@@ -399,7 +387,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
             </div>
 
-            {/* Tip card */}
             <TipCard
               creatorId={content.creator_id}
               contentId={content.id}
@@ -409,7 +396,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               openAuth={openAuth}
             />
 
-            {/* Protection notice */}
             <div className="rounded-xl bg-slate-100 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 px-4 py-3 flex items-center gap-2.5">
               <Lock size={14} className="text-slate-400 dark:text-zinc-500 shrink-0" />
               <p className="text-xs text-slate-500 dark:text-zinc-400">
@@ -418,11 +404,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
             </div>
           </div>
         ) : (
-          /* ---- LOCKED UNLOCK VIEW — redesigned ---- */
           <div className="space-y-4">
-            {/* 1. Bright 3D Stacked Card Preview */}
             <div className="relative pb-3" style={{ perspective: '1200px' }}>
-              {/* Staggered 3D backdrop cards */}
               {(content.media_count ?? 1) > 1 && (
                 <>
                   <div
@@ -450,7 +433,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 </>
               )}
 
-              {/* Main preview card */}
               <div
                 className="relative rounded-[24px] overflow-hidden bg-zinc-900 border-2 border-white/15 shadow-2xl shadow-black/40 transition-transform duration-300 hover:scale-[1.005]"
                 style={{ transformStyle: 'preserve-3d' }}
@@ -558,7 +540,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
             </div>
 
-            {/* 2. Creator & Post Information */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               <div className="flex items-center gap-3">
                 <button
@@ -577,7 +558,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold text-white truncate">
-                      {content.creator?.display_name || content.creator?.username || 'Unknown'}
+                      {content.creator?.display_name || content.creator?.username || 'Creator'}
                     </p>
                     <BadgeCheck size={15} className="text-indigo-400 shrink-0" fill="currentColor" />
                   </div>
@@ -611,7 +592,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               )}
             </div>
 
-            {/* 3. Checkout — unlock button */}
             <div className="rounded-2xl bg-[#131318] border border-zinc-800/60 p-5 shadow-xl shadow-black/20">
               <button
                 onClick={onPayToUnlock}
@@ -635,17 +615,16 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
               <div className="flex items-center justify-center gap-6 mt-4">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Shield size={14} className="text-indigo-400" />
+                  <Shield size={14} />
                   Secure payment
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Zap size={14} className="text-amber-400" />
+                  <Zap size={14} />
                   Instant access
                 </div>
               </div>
             </div>
 
-            {/* 4. Compact footer legal links */}
             <div className="text-center pt-3 pb-8 space-y-2">
               <p className="text-[11px] text-zinc-600">
                 By purchasing, you agree to our Customer Terms and Privacy Policy.
@@ -748,7 +727,6 @@ function TipCard({ creatorId, contentId, creatorName, onTip, user, openAuth }: {
           </button>
         </div>
       )}
-
     </div>
   );
 }
