@@ -95,17 +95,18 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-async function loadCreators(ids: any[]): Promise> {
-  const unique = Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
-  const map: Map<string, Profile> = new Map();
+// Generics stripped to ensure zero Babel/TSX parser collisions
+async function loadCreators(ids: any[]) {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  const map = new Map();
   if (unique.length === 0) return map;
   const { data, error } = await supabase.from('profiles').select('*').in('id', unique);
   if (error) {
     console.error('Failed to load creators:', error.message);
     return map;
   }
-  (data || []).forEach((p) => {
-    map.set(String(p.id), p as Profile);
+  (data || []).forEach((p: any) => {
+    map.set(String(p.id), p);
   });
   return map;
 }
