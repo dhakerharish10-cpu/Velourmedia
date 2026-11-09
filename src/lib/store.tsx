@@ -95,7 +95,7 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-async function loadCreators(ids: Array<string | null | undefined>): Promise> {
+async function loadCreators(ids: any[]): Promise> {
   const unique = Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
   const map: Map<string, Profile> = new Map();
   if (unique.length === 0) return map;
