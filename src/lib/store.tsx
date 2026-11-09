@@ -97,14 +97,16 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 
 async function loadCreators(ids: Array<string | null | undefined>): Promise> {
   const unique = Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
-  const map = new Map<string, Profile>();
+  const map: Map<string, Profile> = new Map();
   if (unique.length === 0) return map;
   const { data, error } = await supabase.from('profiles').select('*').in('id', unique);
   if (error) {
     console.error('Failed to load creators:', error.message);
     return map;
   }
-  (data || []).forEach((p) => map.set(p.id as string, p as Profile));
+  (data || []).forEach((p) => {
+    map.set(String(p.id), p as Profile);
+  });
   return map;
 }
 
@@ -222,7 +224,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const rows = data || [];
     const creators = await loadCreators(rows.map((c) => c.creator_id));
-    setFeed(rows.map((c) => ({ ...c, creator: creators.get(c.creator_id) })) as unknown as Content[]);
+    setFeed(rows.map((c) => ({ ...c, creator: creators.get(String(c.creator_id)) })) as unknown as Content[]);
   }, []);
 
   const refreshPurchases = useCallback(async () => {
@@ -243,7 +245,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const creators = await loadCreators(rows.map((p) => p.content?.creator_id));
     setMyPurchases(
       rows.map((p) =>
-        p.content ? { ...p, content: { ...p.content, creator: creators.get(p.content.creator_id) } } : p
+        p.content ? { ...p, content: { ...p.content, creator: creators.get(String(p.content.creator_id)) } } : p
       ) as unknown as Purchase[]
     );
   }, [user]);
