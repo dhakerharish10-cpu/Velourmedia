@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import { createWhopCheckout } from './whop';
 import type { Profile, Content, Purchase, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
 
 interface Toast {
@@ -60,7 +59,6 @@ interface StoreContextValue {
   removeToast: (id: string) => void;
   purchaseContent: (contentId: string, amount: number) => Promise<{ error: string | null }>;
   handlePayment: (contentId: string, creatorId: string) => Promise<void>;
-
   recordPurchase: (contentId: string, amount: number, paymentId: string) => Promise<{ error: string | null }>;
   isUnlocked: (contentId: string) => boolean;
   handleTipPayment: (creatorId: string, contentId: string, amount: number) => Promise<void>;
@@ -97,8 +95,7 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-// content.creator_id has no foreign key to profiles, so creators are loaded separately
-async function loadCreators(ids: Array<string | null | undefined>): Promise<Map<string, Profile>> {
+async function loadCreators(ids: Array<string | null | undefined>): Promise> {
   const unique = Array.from(new Set(ids.filter((id): id is string => !!id)));
   const map = new Map<string, Profile>();
   if (unique.length === 0) return map;
@@ -432,17 +429,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message };
 
     setIsAdminEmail(isAdminEmailCheck(email));
-
-    // Auto-promote via DB if env-configured admin secret key is available
-    const adminSecretKey = import.meta.env.VITE_ADMIN_SECRET_KEY || '';
-    if (isAdminEmailCheck(email) && adminSecretKey) {
-      try {
-        await supabase.rpc('promote_self_to_admin', { p_email: email, p_secret_key: adminSecretKey });
-      } catch (e) {
-        console.error('Admin auto-promotion failed:', e);
-      }
-    }
-
     return { error: null };
   }, []);
 
@@ -471,43 +457,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setIsAdminEmail(false);
   }, []);
 
-  const purchaseContent = useCallback(async (contentId: string, amount: number) => {
+  // Direct checkout delegation (handled via edge function & webhook)
+  const purchaseContent = useCallback(async (contentId: string, _amount: number) => {
     if (!user) return { error: 'You must be signed in to purchase.' };
-    const { error } = await supabase
-      .from('purchases')
-      .insert({ buyer_id: user.id, content_id: contentId, amount_paid: amount });
-    if (error) {
-      if (error.code === '23505') return { error: 'You already own this content.' };
-      return { error: error.message };
-    }
-    await refreshPurchases();
+    await handlePayment(contentId, '');
     return { error: null };
-  }, [user, refreshPurchases]);
+  }, [user]);
 
-  const recordPurchase = useCallback(async (contentId: string, amount: number, paymentId: string) => {
-    if (!user) return { error: 'You must be signed in.' };
-    const feePercent = platformSettings?.platform_fee_percent ?? 30;
-    const platformFee = Math.round(amount * feePercent / 100 * 100) / 100;
-    const netToCreator = Math.round((amount - platformFee) * 100) / 100;
-    const { error } = await supabase
-      .from('purchases')
-      .insert({
-        buyer_id: user.id,
-        content_id: contentId,
-        amount_paid: amount,
-        payment_id: paymentId,
-        payment_provider: 'whop',
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-      });
-    if (error) {
-      if (error.code === '23505') return { error: 'You already own this content.' };
-      return { error: error.message };
-    }
+  const recordPurchase = useCallback(async (_contentId: string, _amount: number, _paymentId: string) => {
+    // Purchases are verified and created server-side via whop-webhook
     await refreshPurchases();
     await refreshFeed();
     return { error: null };
-  }, [user, platformSettings, refreshPurchases, refreshFeed]);
+  }, [refreshPurchases, refreshFeed]);
 
   const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     setIsRedirecting(true);
@@ -528,13 +490,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
+  // Connect tips directly to the active create-checkout edge function
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
     setIsRedirecting(true);
     try {
-      const { invoice_url } = await createWhopCheckout({ creatorId, contentId, tipAmount });
-      window.location.href = invoice_url;
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: {
+          type: 'tip',
+          creator_id: creatorId,
+          content_id: contentId,
+          amount: Math.round(tipAmount * 100),
+          title: 'Creator Support Contribution',
+        },
+      });
+      if (error || !data?.url) throw new Error('Unable to start tip checkout. Please try again.');
+      window.location.href = data.url;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
+      const message = err instanceof Error ? err.message : 'Unable to start tip checkout. Please try again.';
       addToast(message, 'error');
       setIsRedirecting(false);
     }
