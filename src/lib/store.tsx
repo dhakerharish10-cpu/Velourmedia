@@ -95,20 +95,19 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-// Generics stripped to ensure zero Babel/TSX parser collisions
 async function loadCreators(ids: any[]) {
   const unique = Array.from(new Set(ids.filter(Boolean)));
-  const map = new Map();
-  if (unique.length === 0) return map;
+  const creatorMap = new Map();
+  if (unique.length === 0) return creatorMap;
   const { data, error } = await supabase.from('profiles').select('*').in('id', unique);
   if (error) {
     console.error('Failed to load creators:', error.message);
-    return map;
+    return creatorMap;
   }
   (data || []).forEach((p: any) => {
-    map.set(String(p.id), p);
+    creatorMap.set(String(p.id), p);
   });
-  return map;
+  return creatorMap;
 }
 
 export function useStore() {
@@ -224,8 +223,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     const rows = data || [];
-    const creators = await loadCreators(rows.map((c) => c.creator_id));
-    setFeed(rows.map((c) => ({ ...c, creator: creators.get(String(c.creator_id)) })) as unknown as Content[]);
+    const creatorMap = await loadCreators(rows.map((c: any) => c.creator_id));
+    setFeed(rows.map((c: any) => ({ ...c, creator: creatorMap.get(String(c.creator_id)) })) as unknown as Content[]);
   }, []);
 
   const refreshPurchases = useCallback(async () => {
@@ -243,10 +242,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     const rows = data || [];
-    const creators = await loadCreators(rows.map((p) => p.content?.creator_id));
+    const creatorMap = await loadCreators(rows.map((p: any) => p.content?.creator_id));
     setMyPurchases(
-      rows.map((p) =>
-        p.content ? { ...p, content: { ...p.content, creator: creators.get(String(p.content.creator_id)) } } : p
+      rows.map((p: any) =>
+        p.content ? { ...p, content: { ...p.content, creator: creatorMap.get(String(p.content.creator_id)) } } : p
       ) as unknown as Purchase[]
     );
   }, [user]);
