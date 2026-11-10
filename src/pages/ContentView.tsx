@@ -33,8 +33,9 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [unlockedMedia, setUnlockedMedia] = useState<{ url: string; type: 'image' | 'video' }[] | null>(null);
 
-  const currentContentIdRef = useRef(contentId);
-  currentContentIdRef.current = contentId;
+  const actualDbId = content?.id || (contentId.includes('-') ? contentId : '');
+  const currentDbIdRef = useRef(actualDbId);
+  currentDbIdRef.current = actualDbId;
 
   useEffect(() => {
     setUnlockedMedia(null);
@@ -43,18 +44,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     setJustPurchased(false);
   }, [contentId]);
 
-  const isOwned = isUnlocked(contentId);
+  const isOwned = actualDbId ? isUnlocked(actualDbId) : false;
   const isFree = content ? Number(content.price) <= 0 : false;
   const hasAccess = isOwned || isFree || !!unlockedMedia;
 
   const returnedFromCheckout =
     typeof window !== 'undefined' && window.location.href.includes('paid=1');
 
-  const fetchMedia = useCallback(async (contentId: string) => {
+  const fetchMedia = useCallback(async (realId: string) => {
     const { data } = await supabase
       .from('content_media')
       .select('*')
-      .eq('content_id', contentId)
+      .eq('content_id', realId)
       .order('display_order', { ascending: true });
     return data || [];
   }, []);
@@ -64,16 +65,17 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     (async () => {
       setLoading(true);
 
-      const { data: contentData, error: contentError } = await supabase
-        .from('content')
-        .select('*')
-        .eq('id', contentId)
-        .maybeSingle();
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contentId);
+
+      const query = supabase.from('content').select('*');
+      const { data: contentData, error: contentError } = isUUID
+        ? await query.eq('id', contentId).maybeSingle()
+        : await query.eq('short_code', contentId).maybeSingle();
 
       if (!active) return;
 
       if (contentError || !contentData) {
-        console.error("Error loading post:", contentError);
+        console.error('Error loading content:', contentError);
         setContent(null);
         setLoading(false);
         return;
@@ -81,7 +83,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
       let creatorData = null;
       if (contentData.creator_id) {
-        // ID se creator fetch karein
         const { data: pData } = await supabase
           .from('profiles')
           .select('*')
@@ -90,7 +91,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         creatorData = pData;
       }
 
-      // Agar ID se nahi mila toh profile owner_id se try karein
       if (!creatorData && contentData.creator_id) {
         const { data: fallbackProfile } = await supabase
           .from('profiles')
@@ -107,18 +107,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
         creator: creatorData || { display_name: 'Creator', username: 'creator' }
       });
 
-      supabase.rpc('increment_content_views', { p_content_id: contentId }).then(({ error }) => {
+      supabase.rpc('increment_content_views', { p_content_id: contentData.id }).then(({ error }) => {
         if (error) {
           supabase
             .from('content')
             .update({ views_count: (contentData.views_count || 0) + 1 })
-            .eq('id', contentId)
+            .eq('id', contentData.id)
             .then(() => {});
         }
       });
 
       if (contentData.media_count > 1) {
-        const extraMedia = await fetchMedia(contentId);
+        const extraMedia = await fetchMedia(contentData.id);
         if (active) setMediaItems(extraMedia);
       }
 
@@ -135,17 +135,19 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   }, [user, refreshPurchases]);
 
   const loadUnlockedMedia = useCallback(async (): Promise<boolean> => {
+    if (!actualDbId) return false;
     let claim = '';
-    try { claim = localStorage.getItem(`claim:${contentId}`) ?? ''; } catch { }
+    try { claim = localStorage.getItem(`claim:${actualDbId}`) ?? ''; } catch { }
     if (!user && !claim) return false;
+
     const { data, error } = await supabase.functions.invoke('get-media', {
-      body: { content_id: contentId, claim },
+      body: { content_id: actualDbId, claim },
     });
-    if (currentContentIdRef.current !== contentId) return false;
+    if (currentDbIdRef.current !== actualDbId) return false;
     if (error || !data?.media?.length) return false;
     setUnlockedMedia(data.media as { url: string; type: 'image' | 'video' }[]);
     return true;
-  }, [contentId, user]);
+  }, [actualDbId, user]);
 
   const isPaidPost = !!content && Number(content.price) > 0;
   const isPrivatePaid = isPaidPost && !/^https?:\/\//i.test(content?.media_url ?? '');
@@ -215,7 +217,10 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     setIsRedirecting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { content_id: content.id },
+        body: { 
+          content_id: content.id,
+          short_code: content.short_code || ''
+        },
       });
       if (error || !data?.url) {
         let reason = '';
@@ -240,7 +245,6 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   };
 
   const priceDisplay = content ? Number(content.price).toFixed(2) : '0.00';
-
   const blurPx = ((content?.blur_percent ?? 60) / 100) * 24;
   const blurStyle = { filter: `blur(${blurPx}px)` };
   const thumbBlurPx = (blurPx * 0.4);
