@@ -15,6 +15,15 @@ const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
+function generateNanoCode(): string {
+  const chars = '23456789abcdefghjkmnpqrstuvwxyz';
+  let result = '';
+  for (let i = 0; i < 7; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     p,
@@ -228,10 +237,13 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
         thumbnailUrl = previewUrls.find((u) => !!u) ?? null;
       }
 
+      const shortCode = generateNanoCode();
+
       const { data: contentData, error: insertError } = await supabase
         .from('content')
         .insert({
           creator_id: creatorId,
+          short_code: shortCode,
           title: title.trim(),
           description: description.trim() || null,
           media_url: firstMedia.url,
