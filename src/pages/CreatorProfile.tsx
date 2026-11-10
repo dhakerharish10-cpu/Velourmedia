@@ -13,7 +13,7 @@ interface CreatorProfileProps {
 }
 
 export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
-  const { user } = useStore();
+  const { user: _user } = useStore();
   const [creator, setCreator] = useState<Profile | null>(null);
   const [content, setContent] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,12 +33,14 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
         return;
       }
       setCreator(profile);
+
       const { data: items } = await supabase
         .from('content')
         .select('*')
         .eq('creator_id', profile.id)
         .eq('is_published', true)
         .order('created_at', { ascending: false });
+
       if (active) {
         setContent(items || []);
         setLoading(false);
@@ -47,19 +49,15 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
     return () => { active = false; };
   }, [username]);
 
-  const isOwnProfile = user?.id === creator?.id;
-
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Navbar onNavigate={onNavigate} />
       <AuthModal onNavigate={onNavigate} />
 
-      {/* Guest age gate removed for friction-free checkout */}
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <button
           onClick={() => onNavigate('')}
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-slate-900 dark:text-white transition-colors mb-6"
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition-colors mb-6"
         >
           <ArrowLeft size={16} />
           Back to Discover
@@ -74,7 +72,6 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
           </div>
         ) : (
           <>
-            {/* Profile header */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8">
               <div className="w-16 h-16 rounded-full bg-gradient-brand flex items-center justify-center shrink-0">
                 {creator.avatar_url ? (
@@ -88,10 +85,8 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
                 <p className="text-sm text-slate-500 dark:text-zinc-400">@{creator.username}</p>
                 {creator.bio && <p className="text-sm text-slate-600 dark:text-zinc-500 mt-1 max-w-md">{creator.bio}</p>}
               </div>
-
             </div>
 
-            {/* Content grid */}
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Content ({content.length})</h2>
             {content.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-zinc-500 py-12 text-center">This creator hasn't published any content yet.</p>
@@ -105,7 +100,6 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
           </>
         )}
       </div>
-
     </div>
   );
 }
