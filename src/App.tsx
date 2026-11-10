@@ -138,7 +138,7 @@ function Router() {
     );
   }
 
-  // Content view (Legacy UUID route - untouched)
+  // Content view (Legacy UUID route)
   if (first === 'u' && second) {
     return (
       <>
@@ -149,7 +149,7 @@ function Router() {
     );
   }
 
-  // Content view (Unlocky-style short route)
+  // Content view (Clean short route /l/:code)
   if (first === 'l' && second) {
     return (
       <>
@@ -160,7 +160,7 @@ function Router() {
     );
   }
 
-  // Creator profile (no sidebar)
+  // Creator profile (Clean /c/:username route)
   if (first === 'c' && second) {
     return (
       <>
