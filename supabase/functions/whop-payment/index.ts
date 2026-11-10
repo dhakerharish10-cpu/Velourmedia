@@ -97,7 +97,7 @@ async function sendSaleAlertEmail(
     const grossAmount = Number(intent.amount).toFixed(2);
     const netAmount = netToCreator.toFixed(2);
     const creatorName = creator.display_name || creator.username || "Creator";
-    const appUrl = Deno.env.get("APP_URL") || "https://velourmedia.com";
+    const appUrl = Deno.env.get("APP_URL") || "https://velourmedia.site";
     const dashboardLink = `${appUrl}/#/dashboard`;
 
     const subject = contentType === "tip"
@@ -135,7 +135,7 @@ async function sendSaleAlertEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "VelourMedia <noreply@velourmedia.com>",
+        from: "VelourMedia <noreply@velourmedia.site>",
         to: [creatorEmail],
         subject,
         html,
@@ -321,13 +321,17 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   if (creatorError || !creator) return json({ error: "Creator not found." }, 404);
 
   let amount = 0;
-  let description = "Creator Support Contribution";
+  // Always use a safe generic description to avoid leaking post titles to Whop/Stripe
+  let description = "Digital Creator Access Pass";
+  let contentShortCode: string | null = null;
+
   if (checkoutType === "tip") {
     amount = tipAmount!;
+    description = "Creator Support Pass";
   } else {
     const { data: content } = await supabase
       .from("content")
-      .select("id, title, billing_title, price, creator_id")
+      .select("id, title, price, creator_id, short_code")
       .eq("id", contentId)
       .eq("creator_id", creatorId)
       .eq("is_published", true)
@@ -343,10 +347,8 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       if (owned) return json({ error: "You already own this content." }, 409);
     }
     amount = Number(content.price);
-    // Neutral compliant title Whop ke liye:
-    description = (typeof content.billing_title === "string" && content.billing_title.trim().length > 0)
-      ? content.billing_title
-      : `Digital Creator Asset #${contentId.slice(0, 6).toUpperCase()}`;
+    contentShortCode = typeof content.short_code === "string" ? content.short_code : null;
+    description = "Digital Creator Access Pass";
   }
   if (!contentId) return json({ error: "Content is required." }, 400);
 
@@ -365,8 +367,11 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     ? `con_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`
     : `tip_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`;
 
-  const successUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}?payment_status=success`;
-  const cancelUrl = `${appUrl}/#/u/${encodeURIComponent(contentId!)}`;
+  // Unlocky style short route redirect: /#/l/:shortCode with fallback to /#/u/:uuid
+  const redirectTarget = contentShortCode || contentId;
+  const routePrefix = contentShortCode ? "l" : "u";
+  const successUrl = `${appUrl}/#/${routePrefix}/${encodeURIComponent(redirectTarget)}?paid=1&payment_status=success`;
+  const cancelUrl = `${appUrl}/#/${routePrefix}/${encodeURIComponent(redirectTarget)}`;
 
   let existingPlanId: string | null = null;
   let existingProductId: string | null = null;
@@ -388,6 +393,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       checkout_type: checkoutType,
       creator_id: creatorId,
       content_id: contentId,
+      short_code: contentShortCode ?? "",
       custom_post_id: contentId,
       custom_creator_id: creatorId,
       buyer_id: user ? user.id : null,
@@ -469,6 +475,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
         "metadata[order_id]": orderId,
         "metadata[creator_id]": creatorId,
         "metadata[content_id]": contentId ?? "",
+        "metadata[short_code]": contentShortCode ?? "",
         "metadata[checkout_type]": checkoutType,
         "metadata[custom_post_id]": contentId ?? "",
         "metadata[custom_creator_id]": creatorId,
@@ -490,6 +497,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
         "metadata[order_id]": orderId,
         "metadata[creator_id]": creatorId,
         "metadata[content_id]": contentId ?? "",
+        "metadata[short_code]": contentShortCode ?? "",
         "metadata[checkout_type]": checkoutType,
         "metadata[custom_post_id]": contentId ?? "",
         "metadata[custom_creator_id]": creatorId,
