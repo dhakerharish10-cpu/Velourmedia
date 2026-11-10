@@ -70,13 +70,16 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
     }
   };
 
-  const handleCopyPostLink = async (contentId: string) => {
-    const link = `${window.location.origin}/#/u/${contentId}`;
+  const handleCopyPostLink = async (item: { id: string; short_code?: string | null }) => {
+    const code = item.short_code || item.id;
+    const path = item.short_code ? `#/l/${code}` : `#/u/${code}`;
+    const link = `${window.location.origin}/${path}`;
+
     try {
       await navigator.clipboard.writeText(link);
-      setCopiedId(contentId);
+      setCopiedId(item.id);
       addToast('Post link copied!', 'success');
-      setTimeout(() => setCopiedId((prev) => (prev === contentId ? null : prev)), 2000);
+      setTimeout(() => setCopiedId((prev) => (prev === item.id ? null : prev)), 2000);
     } catch {
       addToast('Failed to copy link.', 'error');
     }
@@ -106,7 +109,6 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
     else addToast('Post duplicated as a draft.', 'success');
   };
 
-  // Filter and sort posts
   const filteredPosts = useMemo(() => {
     let result = [...myContent];
 
@@ -133,10 +135,8 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
 
   return (
     <div className="space-y-6">
-      {/* Profile header card */}
       <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start gap-5">
-          {/* Avatar */}
           <div className="relative shrink-0">
             <div className="w-20 h-20 rounded-full bg-gradient-brand flex items-center justify-center overflow-hidden">
               {profile?.avatar_url ? (
@@ -149,7 +149,6 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
             </div>
           </div>
 
-          {/* Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl font-bold text-slate-900">{profile?.display_name || 'Unnamed'}</h2>
@@ -167,7 +166,6 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
             )}
           </div>
 
-          {/* Edit button */}
           <button
             onClick={openProfileEdit}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 dark:bg-zinc-950 transition-colors shrink-0"
@@ -178,14 +176,12 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
         </div>
       </div>
 
-      {/* Stats bar */}
       <div className="grid grid-cols-3 gap-4">
         <StatCard icon={Package} label="POSTS" value={myContent.length.toString()} accent />
         <StatCard icon={Eye} label="VIEWS" value={totalViews.toString()} />
         <StatCard icon={DollarSign} label="EARNED" value={`$${totalRevenue.toFixed(2)}`} />
       </div>
 
-      {/* Shareable profile link */}
       {profileLink && (
         <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
@@ -199,9 +195,9 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
             <div className="flex gap-2">
               <button
                 onClick={handleCopyProfileLink}
-                className="px-4 py-3 rounded-xl bg-indigo-600 text-slate-900 dark:text-white font-semibold text-sm hover:bg-indigo-500 transition-colors flex items-center justify-center gap-2 shrink-0"
+                className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors flex items-center justify-center gap-2 shrink-0"
               >
-                {copied ? <Check size={16} className="text-emerald-600 dark:text-emerald-400" /> : <Copy size={16} />}
+                {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
                 {copied ? 'Copied!' : 'Copy'}
               </button>
               <a
@@ -217,20 +213,18 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
         </div>
       )}
 
-      {/* Posts section */}
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-slate-900">Posts</h3>
           <button
             onClick={openUpload}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-brand text-slate-900 dark:text-white font-semibold text-sm hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-brand text-white font-semibold text-sm hover:opacity-90 transition-opacity"
           >
             <Plus size={15} />
             New
           </button>
         </div>
 
-        {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-4">
           {(['ALL', 'ACTIVE', 'INACTIVE'] as FilterTab[]).map((tab) => {
             const count = tab === 'ALL' ? myContent.length : tab === 'ACTIVE' ? activeCount : inactiveCount;
@@ -240,7 +234,7 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
                 onClick={() => setFilter(tab)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   filter === tab
-                    ? 'bg-indigo-600 text-slate-900 dark:text-white'
+                    ? 'bg-indigo-600 text-white'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -253,7 +247,6 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
           })}
         </div>
 
-        {/* Search + sort */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -277,7 +270,6 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
           </select>
         </div>
 
-        {/* Post cards */}
         {filteredPosts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Package size={32} className="text-slate-300 mb-2" />
@@ -288,14 +280,16 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
         ) : (
           <div className="space-y-3">
             {filteredPosts.map((item) => {
-              const itemLink = `${window.location.origin}/#/u/${item.id}`;
+              const code = (item as any).short_code || item.id;
+              const path = (item as any).short_code ? `#/l/${code}` : `#/u/${code}`;
+              const itemLink = `${window.location.origin}/${path}`;
               const isPrivate = item.is_private;
               const isActive = item.is_published;
               const earned = Number(item.earned_amount || 0);
+
               return (
                 <div key={item.id} className="group rounded-xl bg-white border border-slate-200 p-4 hover:border-slate-300 transition-colors">
                   <div className="flex items-start gap-3">
-                    {/* Thumbnail */}
                     <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-slate-100 shrink-0">
                       {item.media_type === 'image' ? (
                         <img
@@ -319,7 +313,6 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
                       )}
                     </div>
 
-                    {/* Details */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-slate-900 truncate">{item.title}</p>
@@ -352,9 +345,13 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
                     </div>
                   </div>
 
-                  {/* Action toolbar */}
                   <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-                    <ActionButton icon={copiedId === item.id ? Check : Copy} label={copiedId === item.id ? 'Copied' : 'Copy'} onClick={() => handleCopyPostLink(item.id)} color="indigo" />
+                    <ActionButton 
+                      icon={copiedId === item.id ? Check : Copy} 
+                      label={copiedId === item.id ? 'Copied' : 'Copy'} 
+                      onClick={() => handleCopyPostLink(item)} 
+                      color="indigo" 
+                    />
                     <ActionButton icon={Duplicate} label="Duplicate" onClick={() => handleDuplicate(item.id)} color="slate" />
                     <ActionButton icon={isPrivate ? Unlock : Lock} label={isPrivate ? 'Make public' : 'Make private'} onClick={() => handleTogglePrivate(item.id, !isPrivate)} color="slate" />
                     <ActionButton icon={Power} label={isActive ? 'Deactivate' : 'Activate'} onClick={() => handleToggleActive(item.id, !isActive)} color={isActive ? 'amber' : 'emerald'} />
@@ -427,8 +424,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
   const loadPostSales = useCallback(async () => {
     if (!creatorId) return;
 
-    // Row level security lets a creator read the sales of their own content (plus their own purchases),
-    // so keep only this creator's posts below.
     const { data: purchaseRows, error: salesError } = await supabase
       .from('purchases')
       .select('content_id, amount_paid, net_to_creator, content:content(id, title, creator_id)');
@@ -447,7 +442,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
       if (contentCreatorId !== creatorId) continue;
       const title = (content?.title as string) || 'Unknown';
       const amount = Number(p.amount_paid || 0);
-      // Stored split (70/30 by default); falls back to 70% only for older rows without it
       const storedNet = Number(p.net_to_creator);
       const net = Number.isFinite(storedNet) && storedNet > 0
         ? storedNet
@@ -474,8 +468,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
     loadPostSales();
   }, [loadPostSales]);
 
-  // Realtime: refresh when a new sale is recorded. Row level security decides who receives each
-  // event, so a creator is only notified about purchases of their own content.
   useEffect(() => {
     if (!creatorId) return;
     const channel = supabase
@@ -515,7 +507,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
         <StatCard icon={Package} label="Total Posts" value={myContent.length.toString()} />
       </div>
 
-      {/* Revenue breakdown */}
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
         <h3 className="text-base font-semibold text-slate-900 mb-4">Revenue Breakdown</h3>
         <div className="space-y-3">
@@ -538,7 +529,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
         </div>
       </div>
 
-      {/* Top posts */}
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
         <h3 className="text-base font-semibold text-slate-900 mb-4">Top Posts by Views</h3>
         {sortedByViews.length === 0 ? (
@@ -570,7 +560,6 @@ export function CreatorAnalyticsView({ onNavigate: _onNavigate }: { onNavigate: 
         )}
       </div>
 
-      {/* Per-Post Sales Analytics */}
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
         <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <ShoppingBag size={16} className="text-emerald-500" />
