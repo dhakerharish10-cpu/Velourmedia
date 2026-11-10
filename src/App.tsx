@@ -116,7 +116,7 @@ function Router() {
     );
   }
 
-  // Access link page (no sidebar) — 7-day expiring guest access
+  // Access link page (no sidebar) - 7-day expiring guest access
   if (first === 'access') {
     const query = route.includes('?') ? route.slice(route.indexOf('?') + 1) : '';
     const accessToken = new URLSearchParams(query).get('token');
@@ -138,8 +138,19 @@ function Router() {
     );
   }
 
-  // Content view (no sidebar)
+  // Content view (Legacy UUID route - untouched)
   if (first === 'u' && second) {
+    return (
+      <>
+        <ContentView contentId={second} onNavigate={navigate} />
+        <ToastContainer />
+        <AuthModal onNavigate={navigate} />
+      </>
+    );
+  }
+
+  // Content view (Unlocky-style short route)
+  if (first === 'l' && second) {
     return (
       <>
         <ContentView contentId={second} onNavigate={navigate} />
