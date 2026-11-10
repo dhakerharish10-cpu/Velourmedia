@@ -112,7 +112,7 @@ async function loadCreators(ids: any[]) {
   const unique = Array.from(new Set(ids.filter(Boolean)));
   const creatorMap = new Map();
   if (unique.length === 0) return creatorMap;
-  const { data, error } = await supabase.from('profiles').select('*').in('id', unique);
+  const { data, error } = await supabase.from('public_profiles').select('*').in('id', unique);
   if (error) {
     console.error('Failed to load creators:', error.message);
     return creatorMap;
@@ -543,7 +543,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const getProfileLink = useCallback((username: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velourmedia.site';
-    return `${origin}/#c/${username}`;
+    return `${origin}/c/${encodeURIComponent(username)}`;
   }, []);
 
   const saveBankDetails = useCallback(async (details: Pick<BankDetails, 'bank_name' | 'account_holder_name' | 'bank_account_number' | 'ifsc_code' | 'pan_card_number'>) => {
