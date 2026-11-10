@@ -93,6 +93,19 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
   return email.toLowerCase().trim() === ADMIN_EMAIL;
 }
 
+function getStoredGuestId(): string {
+  try {
+    let id = localStorage.getItem('velour_guest_device_id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('velour_guest_device_id', id);
+    }
+    return id;
+  } catch {
+    return 'guest_browser';
+  }
+}
+
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 async function loadCreators(ids: any[]) {
@@ -460,11 +473,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
     setIsRedirecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('whop-payment', {
-        body: { contentId, creatorId },
+      const guestDeviceId = getStoredGuestId();
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: {
+          kind: 'content',
+          content_id: contentId,
+          creator_id: creatorId,
+          guest_device_id: guestDeviceId,
+        },
       });
       const checkoutUrl = data?.url || data?.invoice_url;
       if (error || !checkoutUrl) throw new Error('Unable to start checkout. Please try again.');
+
+      if (data?.claim) {
+        try { localStorage.setItem(`claim:${contentId}`, data.claim); } catch { }
+      }
       window.location.href = checkoutUrl;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
@@ -474,10 +497,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [addToast]);
 
   const purchaseContent = useCallback(async (contentId: string, _amount: number) => {
-    if (!user) return { error: 'You must be signed in to purchase.' };
     await handlePayment(contentId, '');
     return { error: null };
-  }, [user, handlePayment]);
+  }, [handlePayment]);
 
   const recordPurchase = useCallback(async (_contentId: string, _amount: number, _paymentId: string) => {
     await refreshPurchases();
@@ -492,16 +514,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
     setIsRedirecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('whop-payment', {
+      const guestDeviceId = getStoredGuestId();
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: {
-          creatorId,
-          contentId,
-          tipAmount,
-          isTip: true,
+          kind: 'tip',
+          creator_id: creatorId,
+          content_id: contentId,
+          tip_amount: tipAmount,
+          guest_device_id: guestDeviceId,
         },
       });
       const checkoutUrl = data?.url || data?.invoice_url;
-      if (error || !checkoutUrl) throw new Error('Unable to start tip checkout. Please try again.');
+      if (error || !checkoutUrl) {
+        let reason = '';
+        try {
+          const body = await (error as any)?.context?.json?.();
+          reason = body?.error || body?.detail || '';
+        } catch { }
+        throw new Error(reason || 'Unable to start tip checkout. Please try again.');
+      }
       window.location.href = checkoutUrl;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start tip checkout. Please try again.';
@@ -511,7 +542,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [addToast]);
 
   const getProfileLink = useCallback((username: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velourmedia.site';
     return `${origin}/#c/${username}`;
   }, []);
 
