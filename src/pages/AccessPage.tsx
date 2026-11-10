@@ -27,6 +27,13 @@ export function AccessPage({ token, onNavigate }: AccessPageProps) {
       const result = await verifyAccessToken(token);
       setData(result);
       setRemaining(result.remaining);
+
+      // Persist claim token in localStorage for seamless browsing on direct post URLs
+      if (result.content?.id) {
+        try {
+          localStorage.setItem(`claim:${result.content.id}`, token);
+        } catch { }
+      }
     } catch (err) {
       const e = err as Error & { expired?: boolean; contentId?: string | null };
       setError(e.message);
@@ -70,6 +77,16 @@ export function AccessPage({ token, onNavigate }: AccessPageProps) {
       ? [{ url: data.content.media_url, type: data.content.media_type }]
       : [];
 
+  const handleRepurchase = () => {
+    if (!expiredContentId) return;
+    const shortCode = (data?.content as any)?.short_code;
+    if (shortCode) {
+      onNavigate(`l/${shortCode}`);
+    } else {
+      onNavigate(`u/${expiredContentId}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950">
       <Navbar onNavigate={onNavigate} />
@@ -101,7 +118,7 @@ export function AccessPage({ token, onNavigate }: AccessPageProps) {
               </p>
               {expiredContentId && (
                 <button
-                  onClick={() => onNavigate(`/u/${expiredContentId}`)}
+                  onClick={handleRepurchase}
                   className="mt-6 w-full rounded-xl bg-gradient-brand text-white font-semibold text-sm py-3 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                 >
                   Re-purchase Access
