@@ -72,7 +72,7 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
 
   const handleCopyPostLink = async (item: { id: string; short_code?: string | null }) => {
     const code = item.short_code || item.id;
-    const path = item.short_code ? `#/l/${code}` : `#/u/${code}`;
+    const path = item.short_code ? `l/${code}` : `u/${code}`;
     const link = `${window.location.origin}/${path}`;
 
     try {
@@ -281,7 +281,7 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
           <div className="space-y-3">
             {filteredPosts.map((item) => {
               const code = (item as any).short_code || item.id;
-              const path = (item as any).short_code ? `#/l/${code}` : `#/u/${code}`;
+              const path = (item as any).short_code ? `l/${code}` : `u/${code}`;
               const itemLink = `${window.location.origin}/${path}`;
               const isPrivate = item.is_private;
               const isActive = item.is_published;
