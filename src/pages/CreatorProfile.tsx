@@ -1,10 +1,7 @@
-import { useState, useEffect } from 'react';
-import { useStore } from '../lib/store';
-import { supabase } from '../lib/supabase';
+import { useCreatorProfile, useCreatorPosts } from '../lib/useCreatorProfile';
 import { Navbar } from '../components/Navbar';
 import { ContentCard } from '../components/ContentCard';
 import { AuthModal } from '../components/AuthModal';
-import type { Profile, Content } from '../lib/types';
 import { User as UserIcon, ArrowLeft } from 'lucide-react';
 
 interface CreatorProfileProps {
@@ -12,42 +9,20 @@ interface CreatorProfileProps {
   onNavigate: (path: string) => void;
 }
 
+const safeDecode = (s: string) => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+
 export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
-  const { user: _user } = useStore();
-  const [creator, setCreator] = useState<Profile | null>(null);
-  const [content, setContent] = useState<Content[]>([]);
-  const [loading, setLoading] = useState(true);
+  const decodedUsername = safeDecode(username);
+  const { profile: creator, status } = useCreatorProfile(decodedUsername);
+  const { posts: content, loading: postsLoading } = useCreatorPosts(creator?.id);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      const { data: profile, error: pErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .maybeSingle();
-      if (pErr || !active) return;
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
-      setCreator(profile);
-
-      const { data: items } = await supabase
-        .from('content')
-        .select('*')
-        .eq('creator_id', profile.id)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
-
-      if (active) {
-        setContent(items || []);
-        setLoading(false);
-      }
-    })();
-    return () => { active = false; };
-  }, [username]);
+  const loading = status === 'loading' || (status === 'ready' && postsLoading);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -65,7 +40,7 @@ export function CreatorProfile({ username, onNavigate }: CreatorProfileProps) {
 
         {loading ? (
           <div className="py-20 text-center text-slate-500 dark:text-zinc-500">Loading profile...</div>
-        ) : !creator ? (
+        ) : status === 'not_found' || !creator ? (
           <div className="py-20 text-center">
             <UserIcon size={40} className="mx-auto text-slate-300 dark:text-zinc-700 mb-3" />
             <p className="text-slate-500 dark:text-zinc-400">Creator not found.</p>
