@@ -9,15 +9,27 @@ interface ContentCardProps {
   onNavigate: (path: string) => void;
 }
 
+function getGuestDeviceId(): string {
+  try {
+    let id = localStorage.getItem('velour_guest_device_id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('velour_guest_device_id', id);
+    }
+    return id;
+  } catch {
+    return 'guest_browser';
+  }
+}
+
 export function ContentCard({ content, onNavigate }: ContentCardProps) {
-  const { isUnlocked } = useStore();
+  const { isUnlocked, addToast } = useStore();
   const isOwned = isUnlocked(content.id);
   const price = Number(content.price ?? 0);
   const isFree = price <= 0;
   const isLocked = !isFree && !isOwned;
   const [paying, setPaying] = useState(false);
 
-  // While locked, never use the real media as a preview
   const previewSrc = isLocked
     ? content.thumbnail_url
     : content.thumbnail_url || content.media_url;
@@ -27,25 +39,44 @@ export function ContentCard({ content, onNavigate }: ContentCardProps) {
     if (paying) return;
     setPaying(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert('Please log in to purchase exclusive content.');
-        return;
-      }
+      const guestDeviceId = getGuestDeviceId();
+
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { content_id: content.id },
+        body: {
+          kind: 'content',
+          content_id: content.id,
+          creator_id: content.creator_id,
+          short_code: (content as any).short_code || '',
+          guest_device_id: guestDeviceId,
+        },
       });
-      if (error || !data?.url) throw error ?? new Error('No checkout URL received');
-      window.location.href = data.url;
+
+      const checkoutUrl = data?.url || data?.invoice_url;
+      if (error || !checkoutUrl) {
+        throw error ?? new Error('No checkout URL received');
+      }
+
+      if (data?.claim) {
+        try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { }
+      }
+
+      window.location.href = checkoutUrl;
     } catch (err) {
       console.error(err);
-      alert('Could not start checkout. Please try again.');
+      addToast('Could not start checkout. Please try again.', 'error');
     } finally {
       setPaying(false);
     }
   };
 
-  const open = () => onNavigate(`/u/${content.id}`);
+  const open = () => {
+    const code = (content as any).short_code;
+    if (code) {
+      onNavigate(`l/${code}`);
+    } else {
+      onNavigate(`u/${content.id}`);
+    }
+  };
 
   return (
     <div
