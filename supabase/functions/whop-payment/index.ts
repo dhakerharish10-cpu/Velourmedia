@@ -98,7 +98,7 @@ async function sendSaleAlertEmail(
     const netAmount = netToCreator.toFixed(2);
     const creatorName = creator.display_name || creator.username || "Creator";
     const appUrl = Deno.env.get("APP_URL") || "https://velourmedia.site";
-    const dashboardLink = `${appUrl}/#/dashboard`;
+    const dashboardLink = `${appUrl}/dashboard`;
 
     const subject = contentType === "tip"
       ? `New Tip Alert! You earned ${netAmount} USD on VelourMedia`
@@ -240,6 +240,7 @@ async function activatePurchase(
 
   const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : null;
   const contentId = typeof intent.content_id === "string" ? intent.content_id : null;
+
   if (paymentId && creatorId) {
     const { data: existingTx } = await supabase
       .from("transactions")
@@ -267,6 +268,9 @@ async function activatePurchase(
 
   if (intent.checkout_type === "content") {
     const buyerId = typeof intent.buyer_id === "string" ? intent.buyer_id : null;
+    const guestAccessToken = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().slice(0, 8);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
     const { error: purchaseError } = await supabase.from("purchases").upsert({
       buyer_id: buyerId,
       content_id: contentId,
@@ -276,13 +280,51 @@ async function activatePurchase(
       platform_fee: platformFee,
       net_to_creator: netToCreator,
       buyer_email: buyerEmail ?? null,
+      access_token: guestAccessToken,
+      expires_at: expiresAt,
     }, {
       onConflict: buyerId ? "buyer_id,content_id" : "payment_id,content_id",
-      ignoreDuplicates: true,
+      ignoreDuplicates: false,
     });
+
     if (purchaseError) {
       console.error("[whop] purchase upsert failed", purchaseError);
       return false;
+    }
+
+    // Buyer ko email receipt aur magic access token bhejna
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (buyerEmail && resendApiKey) {
+      const appBase = Deno.env.get("APP_URL") || "https://velourmedia.site";
+      const accessLink = `${appBase}/access?token=${guestAccessToken}`;
+
+      try {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: "VelourMedia <noreply@velourmedia.site>",
+            to: [buyerEmail],
+            subject: "Your Content Access Link - VelourMedia",
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
+                <h2 style="color: #4f46e5; margin-bottom: 12px;">Payment Successful!</h2>
+                <p style="color: #334155; font-size: 15px; line-height: 1.5;">Thank you for your purchase. You can unlock and view your content at any time using your private access pass below:</p>
+                <div style="margin: 28px 0; text-align: center;">
+                  <a href="${accessLink}" style="display: inline-block; padding: 14px 28px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 15px;">Unlock Your Content</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 12px; word-break: break-all;">Direct Link: <a href="${accessLink}">${accessLink}</a></p>
+              </div>
+            `,
+          }),
+        });
+        console.log("[whop] access link email sent to buyer", buyerEmail);
+      } catch (emailErr) {
+        console.error("[whop] buyer email sending failed", emailErr);
+      }
     }
   } else if (intent.checkout_type === "tip") {
     console.log("[whop] tip processed", { buyer: intent.buyer_id, creator: creatorId, amount: baseAmount, net: netToCreator });
@@ -299,6 +341,7 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   const tipAmount = typeof body.tip_amount === "number" && body.tip_amount > 0 ? body.tip_amount : null;
   const guestDeviceId = typeof body.guest_device_id === "string" ? body.guest_device_id : null;
   const guestEmail = typeof body.guest_email === "string" ? body.guest_email : null;
+
   if (!creatorId) return json({ error: "Creator is required." }, 400);
   if (!contentId) return json({ error: "Content is required." }, 400);
   if (checkoutType === "tip" && !tipAmount) return json({ error: "Tip amount is required." }, 400);
@@ -321,7 +364,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
   if (creatorError || !creator) return json({ error: "Creator not found." }, 404);
 
   let amount = 0;
-  // Always use a safe generic description to avoid leaking post titles to Whop/Stripe
   let description = "Digital Creator Access Pass";
   let contentShortCode: string | null = null;
 
@@ -350,7 +392,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     contentShortCode = typeof content.short_code === "string" ? content.short_code : null;
     description = "Digital Creator Access Pass";
   }
-  if (!contentId) return json({ error: "Content is required." }, 400);
 
   const apiKey = Deno.env.get("WHOP_API_KEY");
   const companyId = Deno.env.get("WHOP_COMPANY_ID");
@@ -367,11 +408,11 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     ? `con_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`
     : `tip_${buyerTag.slice(0, 12)}_${crypto.randomUUID()}`;
 
-  // Unlocky style short route redirect: /#/l/:shortCode with fallback to /#/u/:uuid
+  // Clean URL format without hash
   const redirectTarget = contentShortCode || contentId;
   const routePrefix = contentShortCode ? "l" : "u";
-  const successUrl = `${appUrl}/#/${routePrefix}/${encodeURIComponent(redirectTarget)}?paid=1&payment_status=success`;
-  const cancelUrl = `${appUrl}/#/${routePrefix}/${encodeURIComponent(redirectTarget)}`;
+  const successUrl = `${appUrl}/${routePrefix}/${encodeURIComponent(redirectTarget)}?paid=1&payment_status=success`;
+  const cancelUrl = `${appUrl}/${routePrefix}/${encodeURIComponent(redirectTarget)}`;
 
   let existingPlanId: string | null = null;
   let existingProductId: string | null = null;
@@ -413,8 +454,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
     cancel_url: cancelUrl,
   };
 
-  console.log("[whop] create-checkout request", { orderId, amount, checkoutType, planType, buyer: buyerTag, successUrl, cancelUrl, apiKeyPrefix: apiKey.slice(0, 8), existingPlanId, existingProductId });
-
   let checkoutResponse: Response | null = null;
   let checkoutText = "";
   try {
@@ -427,7 +466,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       body: JSON.stringify(whopPayload),
     });
     checkoutText = await checkoutResponse.text();
-    console.log("[whop] checkout response", { status: checkoutResponse.status, body: checkoutText.slice(0, 1000) });
   } catch (fetchErr) {
     console.error("[whop] checkout fetch threw — will attempt fallback", String(fetchErr));
   }
@@ -466,7 +504,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
         : typeof checkoutResult.error === "string"
           ? checkoutResult.error
           : `Whop returned ${checkoutResponse.status}: ${checkoutText.slice(0, 500)}`;
-    console.error("[whop] checkout creation failed", { status: checkoutResponse?.status, apiMessage, checkoutResult, requestPayload: whopPayload });
 
     const fallbackId = existingPlanId ?? existingProductId;
     if (fallbackId) {
@@ -483,14 +520,12 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       if (user) metaParams.set("metadata[buyer_id]", user.id);
       if (guestDeviceId) metaParams.set("metadata[guest_device_id]", guestDeviceId);
       checkoutUrl = `${existingPurchaseUrl}?${metaParams.toString()}`;
-      console.log("[whop] fallback to direct purchase_url with metadata", { fallbackId, checkoutUrl });
     } else {
       return json({ error: `Unable to create the Whop checkout: ${apiMessage}` }, 502);
     }
   }
 
   if (!checkoutUrl) {
-    console.error("[whop] no checkout URL in response", checkoutResult);
     const fallbackId = existingPlanId ?? existingProductId;
     if (fallbackId) {
       const metaParams = new URLSearchParams({
@@ -505,7 +540,6 @@ async function createCheckout(req: Request, body: JsonRecord): Promise<Response>
       if (user) metaParams.set("metadata[buyer_id]", user.id);
       if (guestDeviceId) metaParams.set("metadata[guest_device_id]", guestDeviceId);
       checkoutUrl = `https://whop.com/checkout/${fallbackId}?${metaParams.toString()}`;
-      console.log("[whop] last-resort fallback to direct purchase_url", { fallbackId, checkoutUrl });
     } else {
       return json({ error: "Whop checkout did not return a valid URL." }, 502);
     }
@@ -568,7 +602,6 @@ async function confirmPayment(req: Request, orderId: string): Promise<Response> 
     .eq("id", intentRecord.id);
   if (updateError) console.error("[whop] confirm-payment intent update failed", updateError);
 
-  console.log("[whop] confirm-payment fallback activated for order", orderId);
   return json({ order_id: orderId, status: "confirmed", content_id: intentRecord.content_id, creator_id: intentRecord.creator_id });
 }
 
@@ -605,7 +638,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
     .limit(1)
     .maybeSingle();
   const primaryCreatorId = primaryCreator?.id ?? null;
-  console.log("[whop] sync primary creator fallback", { primaryCreatorId, username: primaryCreator?.username });
 
   let synced = 0;
   let historical = 0;
@@ -617,20 +649,14 @@ async function syncWhopPayments(req: Request): Promise<Response> {
     const params = new URLSearchParams({ per: "100", page: String(page), status: "succeeded" });
     if (companyId) params.set("company_id", companyId);
     const url = `${WHOP_API_BASE}/payments?${params.toString()}`;
-    console.log("[whop] sync fetching page", page, url);
 
     const response = await fetch(url, {
       headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
     });
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("[whop] sync API error", response.status, text.slice(0, 500));
-      break;
-    }
+    if (!response.ok) break;
 
     const result = await response.json().catch(() => ({})) as JsonRecord;
     const payments = Array.isArray(result.data) ? result.data as JsonRecord[] : [];
-    console.log("[whop] sync page", page, "got", payments.length, "payments");
 
     for (const payment of payments) {
       const paymentStatus = typeof payment.status === "string" ? payment.status : "";
@@ -717,6 +743,9 @@ async function syncWhopPayments(req: Request): Promise<Response> {
       });
 
       if (attribution.content_id) {
+        const guestAccessToken = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().slice(0, 8);
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
         await supabase.from("purchases").upsert({
           buyer_id: null,
           content_id: attribution.content_id,
@@ -726,6 +755,8 @@ async function syncWhopPayments(req: Request): Promise<Response> {
           platform_fee: platformFee,
           net_to_creator: netToCreator,
           buyer_email: buyerEmail ?? null,
+          access_token: guestAccessToken,
+          expires_at: expiresAt,
         }, { onConflict: "payment_id,content_id", ignoreDuplicates: true });
       }
 
@@ -740,7 +771,6 @@ async function syncWhopPayments(req: Request): Promise<Response> {
     page++;
   }
 
-  console.log("[whop] sync complete", { synced, historical, skipped, pages: page - 1 });
   return json({ synced, historical, skipped, pages: page - 1 });
 }
 
