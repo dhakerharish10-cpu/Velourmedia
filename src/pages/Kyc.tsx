@@ -1,6 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../lib/store';
-import { ShieldCheck, Upload, Check, FileText, AlertCircle, Loader2, Building2, Landmark, User, Hash, CreditCard, Wallet, Bitcoin, Info } from 'lucide-react';
+import {
+  ShieldCheck,
+  Upload,
+  Check,
+  FileText,
+  AlertCircle,
+  Loader2,
+  Building2,
+  Landmark,
+  User,
+  Hash,
+  CreditCard,
+  Wallet,
+  Bitcoin,
+  Info,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 type KycStatus = 'unverified' | 'pending' | 'verified';
@@ -24,21 +39,24 @@ export function KycPage() {
   const [backFile, setBackFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Bank Form State
   const [bankName, setBankName] = useState('');
   const [holderName, setHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [confirmAccount, setConfirmAccount] = useState('');
   const [ifscCode, setIfscCode] = useState('');
+  const [panCard, setPanCard] = useState('');
   const [savingBank, setSavingBank] = useState(false);
   const [bankEditMode, setBankEditMode] = useState(false);
 
+  // Payout Method State
   const [payoutTab, setPayoutTab] = useState<PayoutTab>('bank');
   const [upiId, setUpiId] = useState('');
   const [cryptoWallet, setCryptoWallet] = useState('');
   const [cryptoNetwork, setCryptoNetwork] = useState('TRC20');
   const [savingPayout, setSavingPayout] = useState(false);
 
-  const hasBankDetails = !!bankDetails && !!bankDetails.bank_account_number;
+  const hasBankDetails = Boolean(bankDetails && bankDetails.bank_account_number);
 
   useEffect(() => {
     if (bankDetails) {
@@ -47,6 +65,7 @@ export function KycPage() {
       setAccountNumber(bankDetails.bank_account_number || '');
       setConfirmAccount(bankDetails.bank_account_number || '');
       setIfscCode(bankDetails.ifsc_code || '');
+      setPanCard(bankDetails.pan_card_number || '');
     }
   }, [bankDetails]);
 
@@ -64,11 +83,23 @@ export function KycPage() {
       addToast('Please upload the front of your document.', 'error');
       return;
     }
+
+    if (frontFile.size > 10 * 1024 * 1024 || (backFile && backFile.size > 10 * 1024 * 1024)) {
+      addToast('File size must be under 10MB.', 'error');
+      return;
+    }
+
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setSubmitting(false);
-    setStatus('pending');
-    addToast('KYC documents submitted. Verification typically takes 24-48 hours.', 'success');
+    try {
+      // Backend / Storage submission handling
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      setStatus('pending');
+      addToast('KYC documents submitted. Verification typically takes 24-48 hours.', 'success');
+    } catch {
+      addToast('Failed to submit documents. Please try again.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSaveBank = async () => {
@@ -98,10 +129,11 @@ export function KycPage() {
       bank_name: bankName.trim(),
       account_holder_name: holderName.trim(),
       bank_account_number: accountNumber.trim(),
-      ifsc_code: ifscCode.trim(),
-      pan_card_number: bankDetails?.pan_card_number || '',
+      ifsc_code: ifscCode.trim().toUpperCase(),
+      pan_card_number: panCard.trim().toUpperCase(),
     });
     setSavingBank(false);
+
     if (error) {
       addToast(error, 'error');
       return;
@@ -113,14 +145,16 @@ export function KycPage() {
   const handleSavePayoutMethod = async () => {
     setSavingPayout(true);
     const updates: Record<string, unknown> = { preferred_payout_method: payoutTab };
+
     if (payoutTab === 'upi') {
-      if (!upiId.trim()) {
-        addToast('Please enter your UPI ID.', 'error');
+      if (!upiId.trim() || !upiId.includes('@')) {
+        addToast('Please enter a valid UPI ID (e.g. user@bank).', 'error');
         setSavingPayout(false);
         return;
       }
       updates.upi_id = upiId.trim();
     }
+
     if (payoutTab === 'crypto') {
       if (!cryptoWallet.trim()) {
         addToast('Please enter your USDT wallet address.', 'error');
@@ -130,8 +164,10 @@ export function KycPage() {
       updates.crypto_wallet_address = cryptoWallet.trim();
       updates.crypto_network = cryptoNetwork;
     }
+
     const { error } = await updateProfile(updates as Parameters<typeof updateProfile>[0]);
     setSavingPayout(false);
+
     if (error) {
       addToast(error, 'error');
       return;
@@ -143,7 +179,9 @@ export function KycPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">KYC Verification</h1>
-        <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Verify your identity to unlock payouts and higher withdrawal limits.</p>
+        <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">
+          Verify your identity to unlock payouts and higher withdrawal limits.
+        </p>
       </div>
 
       {/* Status banner */}
@@ -158,7 +196,11 @@ export function KycPage() {
       >
         <div
           className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
-            status === 'verified' ? 'bg-emerald-500/20' : status === 'pending' ? 'bg-amber-500/20' : 'bg-slate-100 dark:bg-zinc-800'
+            status === 'verified'
+              ? 'bg-emerald-500/20'
+              : status === 'pending'
+              ? 'bg-amber-500/20'
+              : 'bg-slate-100 dark:bg-zinc-800'
           }`}
         >
           {status === 'verified' ? (
@@ -189,7 +231,9 @@ export function KycPage() {
           <Wallet size={18} className="text-indigo-600 dark:text-indigo-400" />
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">Payout Method</h3>
         </div>
-        <p className="text-sm text-slate-500 dark:text-zinc-400">Choose how you'd like to receive your earnings. You can change this at any time.</p>
+        <p className="text-sm text-slate-500 dark:text-zinc-400">
+          Choose how you'd like to receive your earnings. You can change this at any time.
+        </p>
 
         {/* Tabs */}
         <div className="flex gap-2">
@@ -203,6 +247,7 @@ export function KycPage() {
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setPayoutTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   active
@@ -220,43 +265,68 @@ export function KycPage() {
         {/* Tab content */}
         {payoutTab === 'bank' && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-500 dark:text-zinc-400">Enter your bank account details below for direct bank transfer payouts.</p>
+            <p className="text-sm text-slate-500 dark:text-zinc-400">
+              Enter your bank account details below for direct bank transfer payouts.
+            </p>
 
             {hasBankDetails && !bankEditMode ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-zinc-800">
-                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2"><Building2 size={14} /> Bank Name</span>
-                  <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails!.bank_name || '—'}</span>
+                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+                    <Building2 size={14} /> Bank Name
+                  </span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails?.bank_name || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-zinc-800">
-                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2"><User size={14} /> Account Holder</span>
-                  <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails!.account_holder_name || '—'}</span>
+                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+                    <User size={14} /> Account Holder
+                  </span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails?.account_holder_name || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-zinc-800">
-                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2"><CreditCard size={14} /> Account Number</span>
-                  <span className="text-sm font-mono font-medium text-slate-900 dark:text-white">{maskAccountNumber(bankDetails!.bank_account_number)}</span>
+                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+                    <CreditCard size={14} /> Account Number
+                  </span>
+                  <span className="text-sm font-mono font-medium text-slate-900 dark:text-white">
+                    {maskAccountNumber(bankDetails?.bank_account_number || '')}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2"><Hash size={14} /> IFSC / Routing / SWIFT</span>
-                  <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails!.ifsc_code || '—'}</span>
+                <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-zinc-800">
+                  <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+                    <Hash size={14} /> IFSC / Routing / SWIFT
+                  </span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails?.ifsc_code || '—'}</span>
                 </div>
-                <button
-                  onClick={() => setBankEditMode(true)}
-                  className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 font-medium"
-                >
-                  Edit details
-                </button>
+                {bankDetails?.pan_card_number && (
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-sm text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+                      <Hash size={14} /> PAN Card
+                    </span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">{bankDetails.pan_card_number}</span>
+                  </div>
+                )}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setBankEditMode(true)}
+                    className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 font-medium"
+                  >
+                    Edit details
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <FormField label="Bank Name" icon={Building2} placeholder="e.g. HDFC Bank, Chase, ICICI Bank" value={bankName} onChange={setBankName} />
+                <FormField label="Bank Name" icon={Building2} placeholder="e.g. HDFC Bank, ICICI Bank, Chase" value={bankName} onChange={setBankName} />
                 <FormField label="Account Holder Name" icon={User} placeholder="Must match legal identity name" value={holderName} onChange={setHolderName} />
                 <FormField label="Account Number / IBAN" icon={CreditCard} placeholder="Enter your account number" value={accountNumber} onChange={setAccountNumber} />
                 <FormField label="Re-enter Account Number" icon={CreditCard} placeholder="Confirm your account number" value={confirmAccount} onChange={setConfirmAccount} />
                 <FormField label="IFSC Code / Routing Number / SWIFT-BIC" icon={Hash} placeholder="e.g. HDFC0001234" value={ifscCode} onChange={setIfscCode} />
+                <FormField label="PAN Card Number (Optional)" icon={Hash} placeholder="e.g. ABCDE1234F" value={panCard} onChange={setPanCard} />
 
                 <div className="flex items-center gap-3 pt-1">
                   <button
+                    type="button"
                     onClick={handleSaveBank}
                     disabled={savingBank}
                     className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -275,13 +345,15 @@ export function KycPage() {
                   </button>
                   {hasBankDetails && (
                     <button
+                      type="button"
                       onClick={() => {
                         setBankEditMode(false);
-                        setBankName(bankDetails!.bank_name || '');
-                        setHolderName(bankDetails!.account_holder_name || '');
-                        setAccountNumber(bankDetails!.bank_account_number || '');
-                        setConfirmAccount(bankDetails!.bank_account_number || '');
-                        setIfscCode(bankDetails!.ifsc_code || '');
+                        setBankName(bankDetails?.bank_name || '');
+                        setHolderName(bankDetails?.account_holder_name || '');
+                        setAccountNumber(bankDetails?.bank_account_number || '');
+                        setConfirmAccount(bankDetails?.bank_account_number || '');
+                        setIfscCode(bankDetails?.ifsc_code || '');
+                        setPanCard(bankDetails?.pan_card_number || '');
                       }}
                       className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium text-sm hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
                     >
@@ -305,6 +377,7 @@ export function KycPage() {
               </div>
             )}
             <button
+              type="button"
               onClick={handleSavePayoutMethod}
               disabled={savingPayout}
               className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -326,13 +399,16 @@ export function KycPage() {
 
         {payoutTab === 'crypto' && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-500 dark:text-zinc-400">Enter your USDT wallet address for crypto payouts. Select the network carefully — sending to the wrong network will result in permanent loss of funds.</p>
+            <p className="text-sm text-slate-500 dark:text-zinc-400">
+              Enter your USDT wallet address for crypto payouts. Select the network carefully — sending to the wrong network will result in permanent loss of funds.
+            </p>
             <div>
               <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Select Network</label>
               <div className="flex gap-2">
                 {['TRC20', 'BEP20', 'ERC20'].map((net) => (
                   <button
                     key={net}
+                    type="button"
                     onClick={() => setCryptoNetwork(net)}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                       cryptoNetwork === net
@@ -349,10 +425,13 @@ export function KycPage() {
             {profile?.crypto_wallet_address && (
               <div className="flex items-center justify-between py-2 border-t border-slate-100 dark:border-zinc-800">
                 <span className="text-sm text-slate-500 dark:text-zinc-400">Saved Wallet</span>
-                <span className="text-sm font-mono font-medium text-slate-900 dark:text-white">{maskWallet(profile.crypto_wallet_address)}</span>
+                <span className="text-sm font-mono font-medium text-slate-900 dark:text-white">
+                  {maskWallet(profile.crypto_wallet_address)}
+                </span>
               </div>
             )}
             <button
+              type="button"
               onClick={handleSavePayoutMethod}
               disabled={savingPayout}
               className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -394,6 +473,7 @@ export function KycPage() {
               ].map((d) => (
                 <button
                   key={d.id}
+                  type="button"
                   onClick={() => setDocType(d.id)}
                   className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                     docType === d.id
@@ -407,7 +487,7 @@ export function KycPage() {
             </div>
           </div>
 
-          {/* Upload front */}
+          {/* Upload front & back */}
           <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm p-5 space-y-4">
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">Upload Documents</h3>
             <FileUpload label="Front of document" file={frontFile} onChange={setFrontFile} />
@@ -421,9 +501,10 @@ export function KycPage() {
             </div>
 
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={submitting}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-brand text-slate-900 dark:text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {submitting ? (
                 <>
@@ -454,7 +535,7 @@ export function KycPage() {
             </div>
             <div className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-zinc-800/50">
               <span className="text-slate-500 dark:text-zinc-400">Status</span>
-              <span className="text-amber-400 font-medium">In Review</span>
+              <span className="text-amber-500 font-medium">In Review</span>
             </div>
             <div className="flex items-center justify-between py-2">
               <span className="text-slate-500 dark:text-zinc-400">Submitted</span>
@@ -467,7 +548,19 @@ export function KycPage() {
   );
 }
 
-function FormField({ label, icon: Icon, placeholder, value, onChange }: { label: string; icon: LucideIcon; placeholder: string; value: string; onChange: (v: string) => void }) {
+function FormField({
+  label,
+  icon: Icon,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  icon: LucideIcon;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div>
       <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">{label}</label>
@@ -485,7 +578,15 @@ function FormField({ label, icon: Icon, placeholder, value, onChange }: { label:
   );
 }
 
-function FileUpload({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
+function FileUpload({
+  label,
+  file,
+  onChange,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
   return (
     <div>
       <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">{label}</label>
