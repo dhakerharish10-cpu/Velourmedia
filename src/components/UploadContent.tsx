@@ -526,7 +526,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
     }
 
     const rows = data as { id: string; is_admin: boolean | null; kyc_status: string | null; can_post_adult: boolean | null }[];
-    if (rows.some((r) => r.is_admin || r.kyc_status === 'verified')) {
+    if (rows.some((r) => r.is_admin || r.kyc_status === 'approved')) {
       const activeRow = rows.find((r) => r.id === profileId);
       setGate({ kind: 'verified', canPostAdult: activeRow?.can_post_adult === true });
     } else if (rows.some((r) => r.kyc_status === 'pending')) {
