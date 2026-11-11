@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
-import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye, ShieldCheck } from 'lucide-react';
+import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye, ShieldCheck, Lock } from 'lucide-react';
 import { KycVerification } from './KycVerification';
+import { findRestrictedKeyword } from '../lib/content-rules';
 
 interface MediaFile {
   file: File;
@@ -14,15 +15,6 @@ const MAX_IMAGE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
-
-function generateNanoCode(): string {
-  const chars = '23456789abcdefghjkmnpqrstuvwxyz';
-  let result = '';
-  for (let i = 0; i < 7; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -79,13 +71,14 @@ async function makeTinyPreview(file: File, type: 'image' | 'video'): Promise<Blo
   }
 }
 
-function UploadForm({ onDone }: { onDone?: () => void }) {
+function UploadForm({ onDone, canPostAdult }: { onDone?: () => void; canPostAdult: boolean }) {
   const { user, activeProfileId, profiles, addToast, refreshMyContent, refreshFeed } = useStore();
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [blurPercent, setBlurPercent] = useState(60);
+  const [isAdult, setIsAdult] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +90,7 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
     setDescription('');
     setPrice('');
     setBlurPercent(60);
+    setIsAdult(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [mediaFiles]);
 
@@ -169,6 +163,10 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
       addToast('Please enter a title.', 'error');
       return;
     }
+    if (!canPostAdult && findRestrictedKeyword(title, description)) {
+      addToast('Upload Rejected: Inappropriate keywords detected. Your account is not approved to post restricted content.', 'error');
+      return;
+    }
 
     setUploading(true);
     const uploaded: { bucket: string; path: string }[] = [];
@@ -237,13 +235,10 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
         thumbnailUrl = previewUrls.find((u) => !!u) ?? null;
       }
 
-      const shortCode = generateNanoCode();
-
       const { data: contentData, error: insertError } = await supabase
         .from('content')
         .insert({
           creator_id: creatorId,
-          short_code: shortCode,
           title: title.trim(),
           description: description.trim() || null,
           media_url: firstMedia.url,
@@ -254,6 +249,7 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
           media_count: uploadedUrls.length,
           blur_level: blurPercent <= 33 ? 'low' : blurPercent >= 80 ? 'hard' : 'medium',
           blur_percent: blurPercent,
+          is_adult: canPostAdult ? isAdult : false,
         })
         .select('id')
         .single();
@@ -299,6 +295,7 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
           : (err as { message?: string } | null)?.message || 'Upload failed.';
       console.error('Upload failed:', err);
       const gateRejected = /row-level security/i.test(message);
+      const contentRuleRejected = message.includes('enforce_content_upload_rules');
       try {
         if (createdContentId) await supabase.from('content').delete().eq('id', createdContentId);
         for (const bucket of Array.from(new Set(uploaded.map((u) => u.bucket)))) {
@@ -307,7 +304,11 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
       } catch (cleanupErr) {
         console.error('Cleanup after failed upload failed:', cleanupErr);
       }
-      addToast(gateRejected ? 'Your account must be verified before you can post.' : message, 'error');
+      if (contentRuleRejected) {
+        addToast('Upload Rejected: Restricted content or keywords are not permitted for your account. Your account is not approved to post restricted content.', 'error');
+      } else {
+        addToast(gateRejected ? 'Your account must be verified before you can post.' : message, 'error');
+      }
     } finally {
       setUploading(false);
     }
@@ -397,6 +398,28 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
           />
         </div>
 
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 dark:border-zinc-700/60 bg-slate-50 dark:bg-zinc-900/60 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-700 dark:text-zinc-200">18+ / Sensitive Content</p>
+            {canPostAdult ? (
+              <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">Mark this post if it contains adult or sensitive material.</p>
+            ) : (
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                <Lock size={10} />
+                Approval required for 18+ content
+              </span>
+            )}
+          </div>
+          <input
+            type="checkbox"
+            checked={canPostAdult ? isAdult : false}
+            disabled={!canPostAdult}
+            onChange={(e) => setIsAdult(e.target.checked)}
+            aria-label="18+ or sensitive content"
+            className="mt-1 h-4 w-4 shrink-0 accent-indigo-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+          />
+        </div>
+
         <div>
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Price (USD $)</label>
           <div className="relative">
@@ -474,7 +497,7 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
 type GateState =
   | { kind: 'loading' }
   | { kind: 'error' }
-  | { kind: 'verified' }
+  | { kind: 'verified'; canPostAdult: boolean }
   | { kind: 'pending' }
   | { kind: 'unverified' }
   | { kind: 'rejected'; reason: string | null };
@@ -492,7 +515,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
     setChecking(true);
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, kyc_status')
+      .select('id, is_admin, kyc_status, can_post_adult')
       .or(`id.eq.${user.id},owner_id.eq.${user.id}`);
 
     if (error || !data) {
@@ -502,9 +525,10 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       return;
     }
 
-    const rows = data as { id: string; role: string | null; kyc_status: string | null }[];
-    if (rows.some((r) => r.role === 'admin' || r.kyc_status === 'verified')) {
-      setGate({ kind: 'verified' });
+    const rows = data as { id: string; is_admin: boolean | null; kyc_status: string | null; can_post_adult: boolean | null }[];
+    if (rows.some((r) => r.is_admin || r.kyc_status === 'verified')) {
+      const activeRow = rows.find((r) => r.id === profileId);
+      setGate({ kind: 'verified', canPostAdult: activeRow?.can_post_adult === true });
     } else if (rows.some((r) => r.kyc_status === 'pending')) {
       setGate({ kind: 'pending' });
     } else if (rows.some((r) => r.kyc_status === 'rejected')) {
@@ -520,7 +544,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       setGate({ kind: 'unverified' });
     }
     setChecking(false);
-  }, [user]);
+  }, [user, profileId]);
 
   useEffect(() => {
     loadGate();
@@ -553,7 +577,7 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
     );
   }
 
-  if (gate.kind === 'verified') return <UploadForm onDone={onDone} />;
+  if (gate.kind === 'verified') return <UploadForm onDone={onDone} canPostAdult={gate.canPostAdult} />;
 
   if (!profileId) {
     return (
