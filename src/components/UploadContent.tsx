@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
-import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye, ShieldCheck, Lock } from 'lucide-react';
+import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye, Lock } from 'lucide-react';
 import { KycVerification } from './KycVerification';
 import { findRestrictedKeyword } from '../lib/content-rules';
 
@@ -496,7 +496,6 @@ function UploadForm({ onDone, canPostAdult }: { onDone?: () => void; canPostAdul
 
 type GateState =
   | { kind: 'loading' }
-  | { kind: 'error' }
   | { kind: 'verified'; canPostAdult: boolean }
   | { kind: 'pending' }
   | { kind: 'unverified' }
@@ -513,37 +512,40 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
   const loadGate = useCallback(async () => {
     if (!user) return;
     setChecking(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, is_admin, kyc_status, can_post_adult')
-      .or(`id.eq.${user.id},owner_id.eq.${user.id}`);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, is_admin, kyc_status, can_post_adult')
+        .or(`id.eq.${user.id},owner_id.eq.${user.id}`);
 
-    if (error || !data) {
-      console.error('Could not check verification status:', error?.message);
-      setGate({ kind: 'error' });
-      setChecking(false);
-      return;
-    }
+      if (error || !data) {
+        throw error ?? new Error('Empty profile response');
+      }
 
-    const rows = data as { id: string; is_admin: boolean | null; kyc_status: string | null; can_post_adult: boolean | null }[];
-    if (rows.some((r) => r.is_admin || r.kyc_status === 'verified' || r.kyc_status === 'approved')) {
-      const activeRow = rows.find((r) => r.id === profileId);
-      setGate({ kind: 'verified', canPostAdult: activeRow?.can_post_adult === true });
-    } else if (rows.some((r) => r.kyc_status === 'pending')) {
-      setGate({ kind: 'pending' });
-    } else if (rows.some((r) => r.kyc_status === 'rejected')) {
-      const { data: latest } = await supabase
-        .from('creator_kyc')
-        .select('rejection_reason')
-        .eq('status', 'rejected')
-        .order('reviewed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setGate({ kind: 'rejected', reason: latest?.rejection_reason ?? null });
-    } else {
+      const rows = data as { id: string; is_admin: boolean | null; kyc_status: string | null; can_post_adult: boolean | null }[];
+      if (rows.some((r) => r.is_admin || r.kyc_status === 'verified' || r.kyc_status === 'approved')) {
+        const activeRow = rows.find((r) => r.id === profileId);
+        setGate({ kind: 'verified', canPostAdult: activeRow?.can_post_adult === true });
+      } else if (rows.some((r) => r.kyc_status === 'pending')) {
+        setGate({ kind: 'pending' });
+      } else if (rows.some((r) => r.kyc_status === 'rejected')) {
+        const { data: latest } = await supabase
+          .from('creator_kyc')
+          .select('rejection_reason')
+          .eq('status', 'rejected')
+          .order('reviewed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setGate({ kind: 'rejected', reason: latest?.rejection_reason ?? null });
+      } else {
+        setGate({ kind: 'unverified' });
+      }
+    } catch (err) {
+      console.error('KYC GATE ERROR:', err);
       setGate({ kind: 'unverified' });
+    } finally {
+      setChecking(false);
     }
-    setChecking(false);
   }, [user, profileId]);
 
   useEffect(() => {
@@ -557,22 +559,6 @@ export function UploadContent({ onDone }: { onDone?: () => void }) {
       <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-10 text-center">
         <Loader2 size={26} className="animate-spin text-indigo-500 mx-auto" />
         <p className="text-sm text-slate-400 dark:text-zinc-500 mt-3">Checking your account...</p>
-      </div>
-    );
-  }
-
-  if (gate.kind === 'error') {
-    return (
-      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-6 text-center">
-        <ShieldCheck size={26} className="text-slate-400 mx-auto mb-2" />
-        <p className="text-sm text-slate-600 dark:text-zinc-300">We could not check your verification status.</p>
-        <button
-          type="button"
-          onClick={loadGate}
-          className="mt-4 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors"
-        >
-          Try again
-        </button>
       </div>
     );
   }
