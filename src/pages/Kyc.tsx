@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../lib/store';
+import { supabase } from '../lib/supabase';
 import {
   ShieldCheck,
   Upload,
@@ -75,8 +76,26 @@ export function KycPage() {
       setUpiId(profile.upi_id || '');
       setCryptoWallet(profile.crypto_wallet_address || '');
       setCryptoNetwork(profile.crypto_network || 'TRC20');
+      if (profile.kyc_status) {
+        setStatus(profile.kyc_status as KycStatus);
+      }
+      if (profile.kyc_document_type) {
+        setDocType(profile.kyc_document_type);
+      }
     }
   }, [profile]);
+
+  const uploadKycFile = async (userId: string, file: File, side: 'front' | 'back') => {
+    const ext = file.name.split('.').pop();
+    const filePath = `${userId}/${side}_${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('kyc-documents')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) throw uploadError;
+    return filePath;
+  };
 
   const handleSubmit = async () => {
     if (!frontFile) {
@@ -91,12 +110,41 @@ export function KycPage() {
 
     setSubmitting(true);
     try {
-      // Backend / Storage submission handling
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        addToast('User session expired. Please log in again.', 'error');
+        setSubmitting(false);
+        return;
+      }
+
+      // 1. Upload Front Document to kyc-documents bucket
+      const frontPath = await uploadKycFile(user.id, frontFile, 'front');
+
+      // 2. Upload Back Document if provided
+      let backPath: string | null = null;
+      if (backFile) {
+        backPath = await uploadKycFile(user.id, backFile, 'back');
+      }
+
+      // 3. Update Profiles Table
+      const updateData: Record<string, unknown> = {
+        kyc_status: 'pending',
+        kyc_document_type: docType,
+        kyc_front_url: frontPath,
+        kyc_back_url: backPath,
+      };
+
+      const { error: profileError } = await updateProfile(updateData as Parameters<typeof updateProfile>[0]);
+
+      if (profileError) {
+        throw new Error(profileError);
+      }
+
       setStatus('pending');
       addToast('KYC documents submitted. Verification typically takes 24-48 hours.', 'success');
-    } catch {
-      addToast('Failed to submit documents. Please try again.', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit documents.';
+      addToast(message, 'error');
     } finally {
       setSubmitting(false);
     }
