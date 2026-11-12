@@ -1,524 +1,561 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const admin = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  { auth: { persistSession: false } },
+)
 
-type JsonRecord = Record<string, unknown>;
+const SITE_URL = (Deno.env.get('SITE_URL') ?? Deno.env.get('APP_URL') ?? 'https://velourmedia.site').replace(/\/+$/, '')
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
+const RESEND_FROM = Deno.env.get('RESEND_FROM') ?? 'VelourMedia <access@velourmedia.site>'
+const ACCESS_LINK_DAYS = Math.max(1, Number(Deno.env.get('ACCESS_LINK_DAYS') ?? '365') || 365)
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const HASH_RE = /^[0-9a-f]{64}$/i
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function ok(): Response {
-  return new Response(null, { status: 200, headers: corsHeaders });
-}
-
-function getServiceClient() {
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !key) throw new Error("Supabase service configuration is missing.");
-  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const data = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function verifyWhopSignature(
-  rawBody: string,
-  headers: Headers,
-  secret: string,
-): Promise<boolean> {
-  const signatureHeader = headers.get("webhook-signature");
-  if (!signatureHeader) {
-    console.warn("[whop-webhook] missing webhook-signature header");
-    return false;
+async function verifyWhopSignature(rawBody: string, headers: Headers, secret: string): Promise<boolean> {
+  const signatureHeader = headers.get('webhook-signature')
+  const webhookId = headers.get('webhook-id')
+  const webhookTimestamp = headers.get('webhook-timestamp')
+  if (!signatureHeader || !webhookId || !webhookTimestamp) {
+    console.warn('whop-webhook: missing signature headers')
+    return false
   }
 
-  const webhookId = headers.get("webhook-id");
-  const webhookTimestamp = headers.get("webhook-timestamp");
-  if (!webhookId || !webhookTimestamp) {
-    console.warn("[whop-webhook] missing webhook-id or webhook-timestamp header");
-    return false;
+  const ts = Number(webhookTimestamp)
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    console.warn('whop-webhook: timestamp out of range', webhookTimestamp)
+    return false
   }
-
-  const ts = Number(webhookTimestamp);
-  if (isNaN(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
-    console.warn("[whop-webhook] timestamp out of range", webhookTimestamp);
-    return false;
-  }
-
-  const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody}`;
 
   const key = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ["sign"],
-  );
-  const sigBytes = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedContent));
-  const expectedBase64 = btoa(String.fromCharCode(...new Uint8Array(sigBytes)));
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${webhookId}.${webhookTimestamp}.${rawBody}`),
+  )
+  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)))
 
-  const signatures = signatureHeader.split(" ").map((s) => s.trim());
-  for (const sig of signatures) {
-    const parts = sig.split(",");
-    if (parts.length === 2 && parts[0] === "v1" && parts[1] === expectedBase64) {
-      return true;
-    }
+  for (const part of signatureHeader.split(' ')) {
+    const [version, value] = part.trim().split(',')
+    if (version === 'v1' && value && timingSafeEqual(value, expected)) return true
   }
-
-  console.warn("[whop-webhook] signature mismatch");
-  return false;
+  console.warn('whop-webhook: signature mismatch')
+  return false
 }
 
-function extractNetAmount(data: JsonRecord): number {
-  if (typeof data.net_amount === "number" && data.net_amount > 0) {
-    return data.net_amount > 1000 ? data.net_amount / 100 : data.net_amount;
-  }
-  if (typeof data.net_cents === "number" && data.net_cents > 0) return data.net_cents / 100;
-  if (typeof data.gross_amount === "number" && data.gross_amount > 0) {
-    return data.gross_amount > 1000 ? data.gross_amount / 100 : data.gross_amount;
-  }
-  if (typeof data.gross_cents === "number" && data.gross_cents > 0) return data.gross_cents / 100;
-  if (typeof data.total_cents === "number" && data.total_cents > 0) return data.total_cents / 100;
-  if (typeof data.subtotal_cents === "number" && data.subtotal_cents > 0) return data.subtotal_cents / 100;
-  if (typeof data.final_amount === "number" && data.final_amount > 0) return data.final_amount;
-  if (typeof data.initial_price === "number" && data.initial_price > 0) return data.initial_price;
-  return 0;
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
 }
 
-async function resolveAttribution(
-  supabase: ReturnType<typeof getServiceClient>,
-  payment: JsonRecord,
-): Promise<{ creator_id: string | null; content_id: string | null }> {
-  const metadata = (payment.metadata ?? {}) as JsonRecord;
-
-  const customPostId = typeof metadata.custom_post_id === "string" ? metadata.custom_post_id : null;
-  const customCreatorId = typeof metadata.custom_creator_id === "string" ? metadata.custom_creator_id : null;
-  if (customPostId && customCreatorId) {
-    return { creator_id: customCreatorId, content_id: customPostId };
-  }
-  const metaCreatorId = typeof metadata.creator_id === "string" ? metadata.creator_id : null;
-  const metaContentId = typeof metadata.content_id === "string" ? metadata.content_id : null;
-  if (metaCreatorId && metaContentId) {
-    return { creator_id: metaCreatorId, content_id: metaContentId };
-  }
-
-  const planId = typeof payment.plan_id === "string" ? payment.plan_id
-    : typeof (payment.data as JsonRecord | undefined)?.id === "string" ? (payment.data as JsonRecord).id as string
-    : null;
-  if (planId) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("whop_plan_id", planId)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
-
-  const productId = typeof payment.product_id === "string" ? payment.product_id
-    : typeof (payment.data as JsonRecord | undefined)?.product_id === "string" ? (payment.data as JsonRecord).product_id as string
-    : null;
-  if (productId) {
-    const { data: content } = await supabase
-      .from("content")
-      .select("id, creator_id")
-      .eq("whop_product_id", productId)
-      .maybeSingle();
-    if (content) {
-      return { creator_id: content.creator_id as string, content_id: content.id as string };
-    }
-  }
-
-  return { creator_id: null, content_id: null };
+function toCents(v: unknown): number | null {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null
 }
 
-function extractEmail(data: JsonRecord): string | null {
-  const customer = data.customer as JsonRecord | undefined;
-  if (customer && typeof customer.email === "string") return customer.email;
-  if (typeof data.email === "string") return data.email;
-  if (typeof data.buyer_email === "string") return data.buyer_email;
-  return null;
+async function sha256Hex(s: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function sendBuyerAccessEmail(
-  buyerEmail: string,
-  rawToken: string,
-  contentTitle: string,
-): Promise<void> {
-  const resendApiKey = Deno.env.get("RESEND_API_KEY");
-  if (!resendApiKey) {
-    console.warn("[whop-webhook] RESEND_API_KEY not set - skipping buyer email");
-    return;
+function newAccessToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function pickEmail(p: any, m: any): string | null {
+  const candidates = [
+    m?.buyer_email,
+    p?.user?.email,
+    p?.member?.user?.email,
+    p?.customer?.email,
+    p?.customer_email,
+    p?.email,
+    p?.billing_address?.email,
+  ]
+  for (const c of candidates) {
+    if (typeof c === 'string' && EMAIL_RE.test(c.trim())) return c.trim().toLowerCase()
   }
+  return null
+}
 
-  const appUrl = Deno.env.get("APP_URL") || "https://velourmedia.site";
-  const accessLink = `${appUrl}/access?token=${rawToken}`;
-
-  const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-      <div style="background: linear-gradient(135deg, #4f46e5, #7c3aed); border-radius: 16px; padding: 32px; text-align: center; color: white;">
-        <h1 style="font-size: 22px; margin: 0 0 8px;">Your Access Link is Ready!</h1>
-        <p style="color: #e0e7ff; font-size: 14px; margin: 0;">Thank you for your purchase on VelourMedia.</p>
-      </div>
-      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-top: 16px; text-align: center;">
-        <p style="font-size: 15px; font-weight: 600; color: #1e293b; margin: 0 0 16px;">${contentTitle}</p>
-        <p style="font-size: 13px; color: #64748b; margin-bottom: 24px;">Your private access link is valid for 7 days. You can view your unlocked content at any time using the button below:</p>
-        <a href="${accessLink}" style="display: inline-block; padding: 14px 32px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 15px;">Unlock Content Now</a>
-        <p style="font-size: 11px; color: #94a3b8; margin-top: 20px; word-break: break-all;">Or copy this link:<br/>${accessLink}</p>
-      </div>
-      <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-top: 24px;">VelourMedia Protected Access</p>
-    </div>
-  `;
-
+async function sendAccessEmail(to: string, link: string, title: string | null): Promise<{ ok: boolean; error?: string }> {
+  if (!RESEND_API_KEY) return { ok: false, error: 'RESEND_API_KEY is not set' }
+  const safeTitle = title ? escapeHtml(title) : null
+  const html =
+    `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111">` +
+    `<h2 style="margin:0 0 12px">Your purchase is ready</h2>` +
+    (safeTitle
+      ? `<p style="margin:0 0 16px">Thanks for your purchase of <strong>${safeTitle}</strong>.</p>`
+      : `<p style="margin:0 0 16px">Thanks for your purchase.</p>`) +
+    `<p style="margin:0 0 20px">Use the button below to open it on any device. Keep this email: the link is your proof of purchase.</p>` +
+    `<p style="margin:0 0 24px"><a href="${link}" style="background:#4f46e5;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Open my purchase</a></p>` +
+    `<p style="font-size:12px;color:#666;margin:0">If the button does not work, copy this address into your browser:<br>${escapeHtml(link)}</p>` +
+    `<p style="font-size:12px;color:#666;margin:16px 0 0">Anyone with this link can open your purchase, so please do not share it.</p>` +
+    `</div>`
+  const text =
+    `Your purchase is ready.\n\n` +
+    (title ? `Item: ${title}\n\n` : '') +
+    `Open it here (keep this email, the link is your proof of purchase):\n${link}\n\n` +
+    `Anyone with this link can open your purchase, so please do not share it.`
   try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "VelourMedia <noreply@velourmedia.site>",
-        to: [buyerEmail],
-        subject: `Your Access Link: ${contentTitle}`,
-        html,
-      }),
-    });
-    console.log("[whop-webhook] Access link email sent to", buyerEmail);
-  } catch (err) {
-    console.error("[whop-webhook] Failed to send access link email", err);
-  }
-}
-
-async function activatePurchase(
-  supabase: ReturnType<typeof getServiceClient>,
-  intent: JsonRecord,
-  paymentId: string | null,
-  buyerEmail: string | null,
-  whopNetAmount?: number,
-): Promise<boolean> {
-  const baseAmount = whopNetAmount && whopNetAmount > 0 ? whopNetAmount : Number(intent.amount);
-  const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
-  const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
-
-  const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : null;
-  const contentId = typeof intent.content_id === "string" ? intent.content_id : null;
-
-  if (paymentId && creatorId) {
-    const { data: existingTx } = await supabase
-      .from("transactions")
-      .select("id")
-      .eq("payment_id", paymentId)
-      .maybeSingle();
-    if (!existingTx) {
-      await supabase.from("transactions").insert({
-        payment_id: paymentId,
-        order_id: typeof intent.order_id === "string" ? intent.order_id : paymentId,
-        creator_id: creatorId,
-        content_id: contentId,
-        buyer_id: typeof intent.buyer_id === "string" ? intent.buyer_id : null,
-        event_type: "payment.succeeded",
-        checkout_type: typeof intent.checkout_type === "string" ? intent.checkout_type : "content",
-        amount: baseAmount,
-        currency: "usd",
-        status: "succeeded",
-        creator_earnings: netToCreator,
-        platform_earnings: platformFee,
-        raw_payload: { data: { net_amount: whopNetAmount, initial_price: Number(intent.amount) } },
-      });
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ from: RESEND_FROM, to: [to], subject: 'Your VelourMedia access link', html, text }),
+    })
+    if (!res.ok) {
+      const t = await res.text().catch(() => '')
+      console.error('whop-webhook: Resend error', res.status, t.slice(0, 300))
+      return { ok: false, error: `Resend returned ${res.status}` }
     }
+    return { ok: true }
+  } catch (e) {
+    const timedOut = e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')
+    console.error('whop-webhook: Resend request failed:', timedOut ? 'timeout' : e)
+    return { ok: false, error: timedOut ? 'Resend timed out' : 'Resend request failed' }
   }
-
-  if (intent.checkout_type === "content" && contentId) {
-    const buyerId = typeof intent.buyer_id === "string" ? intent.buyer_id : null;
-
-    // Secure guest token generation
-    const rawToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-    const claimHash = await sha256Hex(rawToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    const { error: purchaseError } = await supabase.from("purchases").upsert({
-      buyer_id: buyerId,
-      content_id: contentId,
-      amount_paid: baseAmount,
-      payment_id: paymentId,
-      payment_provider: "whop",
-      platform_fee: platformFee,
-      net_to_creator: netToCreator,
-      buyer_email: buyerEmail,
-      access_token: claimHash,
-      claim_hash: claimHash,
-      expires_at: expiresAt,
-    }, {
-      onConflict: buyerId ? "buyer_id,content_id" : "payment_id,content_id",
-      ignoreDuplicates: true,
-    });
-
-    if (purchaseError) {
-      console.error("[whop-webhook] purchase upsert failed", purchaseError);
-      return false;
-    }
-
-    if (buyerEmail) {
-      let contentTitle = "Your Purchased Content";
-      const { data: content } = await supabase.from("content").select("title").eq("id", contentId).maybeSingle();
-      if (content?.title) contentTitle = content.title;
-      await sendBuyerAccessEmail(buyerEmail, rawToken, contentTitle);
-    }
-  }
-
-  return true;
 }
 
 async function sendSaleAlertEmail(
-  supabase: ReturnType<typeof getServiceClient>,
-  intent: JsonRecord,
-  netToCreator: number,
+  creatorId: string | null,
+  contentTitle: string | null,
+  grossAmount: number,
+  feeAmount: number,
+  netAmount: number,
 ): Promise<void> {
+  if (!creatorId || !RESEND_API_KEY) return
   try {
-    const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : "";
-    if (!creatorId) return;
+    const { data: creator } = await admin
+      .from('profiles')
+      .select('email_sales_alerts, display_name, username, owner_id')
+      .eq('id', creatorId)
+      .maybeSingle()
 
-    const { data: creator } = await supabase
-      .from("profiles")
-      .select("email_sales_alerts, display_name, username, owner_id")
-      .eq("id", creatorId)
-      .maybeSingle();
-    if (!creator || !creator.email_sales_alerts) return;
+    if (!creator || !creator.email_sales_alerts) return
 
-    const ownerId = creator.owner_id || creatorId;
-    const { data: ownerAuth } = await supabase.auth.admin.getUserById(ownerId);
-    const creatorEmail = ownerAuth?.user?.email;
-    if (!creatorEmail) return;
+    const ownerId = creator.owner_id || creatorId
+    const { data: ownerAuth } = await admin.auth.admin.getUserById(ownerId)
+    const creatorEmail = ownerAuth?.user?.email
+    if (!creatorEmail) return
 
-    let contentTitle = "Your content";
-    let contentType = "content";
-    if (intent.checkout_type === "content" && intent.content_id) {
-      const { data: content } = await supabase
-        .from("content")
-        .select("title")
-        .eq("id", intent.content_id)
-        .maybeSingle();
-      if (content?.title) contentTitle = content.title;
-    } else if (intent.checkout_type === "tip") {
-      contentType = "tip";
-      contentTitle = "Tip from a fan";
-    }
-
-    const grossAmount = Number(intent.amount).toFixed(2);
-    const netAmount = netToCreator.toFixed(2);
-    const creatorName = creator.display_name || creator.username || "Creator";
-    const appUrl = Deno.env.get("APP_URL") || "https://velourmedia.site";
-    const dashboardLink = `${appUrl}/dashboard`;
-
-    const subject = contentType === "tip"
-      ? `New Tip Alert! You earned $${netAmount} USD on VelourMedia`
-      : `New Sale Alert! You earned $${netAmount} USD on VelourMedia`;
+    const creatorName = escapeHtml(creator.display_name || creator.username || 'Creator')
+    const safeTitle = escapeHtml(contentTitle || 'Your content')
+    const grossStr = grossAmount.toFixed(2)
+    const feeStr = feeAmount.toFixed(2)
+    const netStr = netAmount.toFixed(2)
+    const dashboardLink = `${SITE_URL}/dashboard`
 
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         <div style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-radius: 16px; padding: 32px; text-align: center;">
           <h1 style="color: #ffffff; font-size: 22px; margin: 0 0 8px;">You made a sale!</h1>
-          <p style="color: #c7d2fe; font-size: 14px; margin: 0;">Hi ${creatorName}, you just earned $${netAmount} USD.</p>
+          <p style="color: #c7d2fe; font-size: 14px; margin: 0;">Hi ${creatorName}, you just earned $${netStr} USD.</p>
         </div>
         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-top: 16px;">
           <table style="width: 100%; font-size: 14px; color: #334155;">
-            <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">$${grossAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (30%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-$${(Number(grossAmount) - Number(netAmount)).toFixed(2)}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (70%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">$${netAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">$${grossStr}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-$${feeStr}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">$${netStr}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${safeTitle}</td></tr>
           </table>
           <a href="${dashboardLink}" style="display: inline-block; margin-top: 20px; padding: 12px 28px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 14px;">Go to Dashboard</a>
         </div>
         <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-top: 24px;">VelourMedia — Premium Creator Content Platform</p>
       </div>
-    `;
+    `
 
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey) return;
-
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
-        from: "VelourMedia <noreply@velourmedia.site>",
+        from: RESEND_FROM,
         to: [creatorEmail],
-        subject,
+        subject: `New Sale Alert! You earned $${netStr} USD on VelourMedia`,
         html,
       }),
-    });
+    })
   } catch (err) {
-    console.error("[whop-webhook] sendSaleAlertEmail error", err);
+    console.error('whop-webhook: sendSaleAlertEmail error', err)
   }
 }
 
-async function processWebhookEvent(payload: JsonRecord): Promise<void> {
-  const eventType = typeof payload.event === "string"
-    ? payload.event
-    : typeof payload.type === "string"
-      ? payload.type
-      : "";
-
-  const data = (payload.data ?? payload) as JsonRecord;
-  const metadata = (data.metadata ?? {}) as JsonRecord;
-  const orderId = typeof metadata.order_id === "string" ? metadata.order_id : "";
-
-  console.log("[whop-webhook] received event", { eventType, orderId });
-
-  const successEvents = [
-    "payment.captured",
-    "payment.succeeded",
-    "payment.completed",
-    "checkout.session.completed",
-    "order.completed",
-    "action.succeeded",
-    "membership.started",
-  ];
-
-  if (!successEvents.includes(eventType)) {
-    console.log("[whop-webhook] ignoring event type", eventType);
-    return;
+function safePayload(event: any) {
+  const p = event?.data ?? {}
+  const m = p?.metadata ?? p?.payment?.metadata ?? {}
+  return {
+    type: event?.type ?? null,
+    id: p?.id ?? null,
+    payment_id: p?.payment?.id ?? p?.payment_id ?? null,
+    status: p?.status ?? null,
+    subtotal: p?.subtotal ?? null,
+    total: p?.total ?? null,
+    currency: p?.currency ?? null,
+    metadata: {
+      type: m.type ?? null,
+      content_id: m.content_id ?? null,
+      creator_id: m.creator_id ?? null,
+      buyer_id: m.buyer_id ?? null,
+      price: m.price ?? null,
+      has_email: !!pickEmail(p, m),
+      has_claim: !!m.claim_hash,
+    },
   }
-
-  if (!orderId) {
-    console.log("[whop-webhook] no order_id in metadata, attempting direct attribution", { eventType });
-    const supabase = getServiceClient();
-    const paymentId = typeof data.id === "string" ? data.id : null;
-    if (!paymentId) return;
-
-    const { data: existing } = await supabase
-      .from("transactions")
-      .select("id")
-      .eq("payment_id", paymentId)
-      .maybeSingle();
-    if (existing) return;
-
-    const attribution = await resolveAttribution(supabase, data);
-    if (!attribution.creator_id) return;
-
-    const netAmount = extractNetAmount(data);
-    const baseAmount = netAmount > 0 ? netAmount : 0;
-    if (baseAmount <= 0) return;
-
-    const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
-    const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
-
-    await supabase.from("transactions").insert({
-      payment_id: paymentId,
-      order_id: paymentId,
-      creator_id: attribution.creator_id,
-      content_id: attribution.content_id,
-      buyer_id: null,
-      event_type: "payment.succeeded",
-      checkout_type: "content",
-      amount: baseAmount,
-      currency: "usd",
-      status: "succeeded",
-      creator_earnings: netToCreator,
-      platform_earnings: platformFee,
-      raw_payload: payload,
-    });
-
-    if (attribution.content_id) {
-      const buyerEmail = extractEmail(data);
-      const rawToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-      const claimHash = await sha256Hex(rawToken);
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      await supabase.from("purchases").upsert({
-        buyer_id: null,
-        content_id: attribution.content_id,
-        amount_paid: baseAmount,
-        payment_id: paymentId,
-        payment_provider: "whop",
-        platform_fee: platformFee,
-        net_to_creator: netToCreator,
-        buyer_email: buyerEmail,
-        access_token: claimHash,
-        claim_hash: claimHash,
-        expires_at: expiresAt,
-      }, { onConflict: "payment_id,content_id", ignoreDuplicates: true });
-
-      if (buyerEmail) {
-        let contentTitle = "Your Content Access";
-        const { data: content } = await supabase.from("content").select("title").eq("id", attribution.content_id).maybeSingle();
-        if (content?.title) contentTitle = content.title;
-        await sendBuyerAccessEmail(buyerEmail, rawToken, contentTitle);
-      }
-    }
-    return;
-  }
-
-  const supabase = getServiceClient();
-  const { data: intent, error: intentError } = await supabase
-    .from("nowpayments_checkout_intents")
-    .select("*")
-    .eq("order_id", orderId)
-    .maybeSingle();
-
-  if (intentError || !intent) {
-    console.error("[whop-webhook] checkout not found for order", orderId);
-    return;
-  }
-
-  const intentRecord = intent as JsonRecord;
-  const paymentId = typeof data.id === "string" ? data.id : null;
-  const buyerEmail = extractEmail(data);
-  const paidAmount = Number(intentRecord.amount);
-  const netAmount = extractNetAmount(data);
-
-  const activated = await activatePurchase(supabase, intentRecord, paymentId, buyerEmail, netAmount > 0 ? netAmount : paidAmount);
-  if (!activated) return;
-
-  const baseAmount = netAmount > 0 ? netAmount : paidAmount;
-  const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
-  await sendSaleAlertEmail(supabase, intentRecord, netToCreator);
-
-  await supabase
-    .from("nowpayments_checkout_intents")
-    .update({ status: "confirmed", payment_id: paymentId, updated_at: new Date().toISOString() })
-    .eq("id", intentRecord.id);
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
-  if (req.method !== "POST") return ok();
-
+async function logEvent(row: {
+  event_type?: string | null
+  payment_id?: string | null
+  status: string
+  error?: string | null
+  payload?: unknown
+}) {
   try {
-    const rawBody = await req.text();
+    const { error } = await admin.from('webhook_events').insert({ provider: 'whop', ...row })
+    if (error) console.error('whop-webhook: could not write webhook_events', error.message)
+  } catch (e) {
+    console.error('whop-webhook: webhook_events write threw', e)
+  }
+}
 
-    const whopWebhookSecret = Deno.env.get("WHOP_WEBHOOK_SECRET");
-    if (whopWebhookSecret) {
-      const isValid = await verifyWhopSignature(rawBody, req.headers, whopWebhookSecret);
-      if (!isValid) {
-        console.warn("[whop-webhook] signature verification failed");
-        return ok();
+Deno.serve(async (req) => {
+  if (req.method !== 'POST') return new Response('method not allowed', { status: 405 })
+
+  const secret = Deno.env.get('WHOP_WEBHOOK_SECRET')
+  if (!secret) {
+    console.error('whop-webhook: WHOP_WEBHOOK_SECRET is not set')
+    return new Response('server not configured', { status: 500 })
+  }
+
+  const body = await req.text()
+  if (!(await verifyWhopSignature(body, req.headers, secret))) {
+    return new Response('invalid signature', { status: 400 })
+  }
+
+  let event: any
+  try {
+    event = JSON.parse(body)
+  } catch {
+    console.error('whop-webhook: verified request had invalid JSON')
+    return new Response('bad json', { status: 400 })
+  }
+
+  const payload = safePayload(event)
+  const eventType: string | null = event?.type ?? null
+
+  // ---- Refunds and disputes: revoke access and update status ----
+  if (typeof eventType === 'string' && /^(refund|dispute)\./.test(eventType)) {
+    const d = event?.data ?? {}
+    const paymentId: string | null = d?.payment?.id ?? d?.payment_id ?? null
+    const refunded = eventType.startsWith('refund.') && d?.status === 'succeeded'
+    const disputed = eventType === 'dispute.created'
+    if (paymentId && (refunded || disputed)) {
+      const { error } = await admin
+        .from('purchases')
+        .update({ status: refunded ? 'refunded' : 'disputed', status_changed_at: new Date().toISOString() })
+        .eq('payment_id', paymentId)
+      if (error) {
+        console.error('whop-webhook: could not mark purchase', paymentId, error.message)
+        await logEvent({
+          event_type: eventType,
+          payment_id: paymentId,
+          status: 'failed',
+          error: `db error: ${error.message}`,
+          payload,
+        })
+        return new Response('db error', { status: 500 })
+      }
+      console.log('whop-webhook: purchase marked', { payment: paymentId, status: refunded ? 'refunded' : 'disputed' })
+    } else if (!paymentId) {
+      console.warn('whop-webhook: refund/dispute event without a payment reference', eventType)
+    }
+    await logEvent({
+      event_type: eventType,
+      payment_id: paymentId,
+      status: paymentId && (refunded || disputed) ? 'needs_review' : 'ignored',
+      error:
+        paymentId && (refunded || disputed)
+          ? `${eventType}: access removed, review the payout`
+          : paymentId
+          ? 'no status change'
+          : 'no payment reference',
+      payload,
+    })
+    return new Response('ok')
+  }
+
+  if (event.type !== 'payment.succeeded') {
+    await logEvent({
+      event_type: eventType,
+      payment_id: event?.data?.id ?? null,
+      status: 'ignored',
+      error: 'not a payment.succeeded event',
+      payload,
+    })
+    return new Response('ignored')
+  }
+
+  const p = event.data
+  const m = p?.metadata ?? {}
+  if (m.type !== 'content_unlock' || !m.content_id) {
+    console.log('whop-webhook: ignored event without content_unlock metadata', p?.id)
+    await logEvent({
+      event_type: eventType,
+      payment_id: p?.id ?? null,
+      status: 'ignored',
+      error: 'no content_unlock metadata',
+      payload,
+    })
+    return new Response('ignored')
+  }
+
+  if (!UUID_RE.test(String(m.content_id))) {
+    console.error('whop-webhook: invalid content_id in metadata', p?.id)
+    await logEvent({
+      event_type: eventType,
+      payment_id: p?.id ?? null,
+      status: 'ignored',
+      error: 'invalid content_id in metadata',
+      payload,
+    })
+    return new Response('ignored')
+  }
+
+  // Deduplication check
+  const { data: existing } = await admin.from('purchases').select('id').eq('payment_id', p.id).limit(1)
+  if (existing && existing.length > 0) {
+    await logEvent({ event_type: eventType, payment_id: p.id, status: 'duplicate', payload })
+    return new Response('ok')
+  }
+
+  const rawBuyer = typeof m.buyer_id === 'string' ? m.buyer_id.trim() : ''
+  const buyerId: string | null = UUID_RE.test(rawBuyer) ? rawBuyer : null
+  const buyerEmail: string | null = pickEmail(p, m)
+  const claimHash: string | null =
+    typeof m.claim_hash === 'string' && HASH_RE.test(m.claim_hash.trim()) ? m.claim_hash.trim().toLowerCase() : null
+  const unreachable = !buyerId && !buyerEmail && !claimHash
+  if (unreachable) console.warn('whop-webhook: purchase has no buyer_id, email or claim', p?.id)
+
+  const isGuest = !buyerId
+  let rawToken: string | null = null
+  let tokenHash: string | null = null
+  let expiresAt: string | null = null
+  if (isGuest && buyerEmail) {
+    rawToken = newAccessToken()
+    tokenHash = await sha256Hex(rawToken)
+    expiresAt = new Date(Date.now() + ACCESS_LINK_DAYS * 86400000).toISOString()
+  }
+
+  const subtotalCents = toCents(p.subtotal)
+  const totalCents = toCents(p.total)
+
+  // Fetch content details (price, title, creator_id)
+  const { data: contentRow } = await admin
+    .from('content')
+    .select('price, title, creator_id')
+    .eq('id', m.content_id)
+    .maybeSingle()
+
+  let priceCents = toCents(m.price)
+  if (priceCents === null) priceCents = subtotalCents
+  if (priceCents === null) priceCents = toCents(contentRow?.price)
+
+  if (priceCents === null) {
+    console.error('whop-webhook: could not determine price for payment', p?.id)
+    await logEvent({
+      event_type: eventType,
+      payment_id: p?.id ?? null,
+      status: 'failed',
+      error: 'could not determine price',
+      payload,
+    })
+    return new Response('amount error', { status: 500 })
+  }
+
+  if (subtotalCents !== null && Math.abs(subtotalCents - priceCents) > 1) {
+    console.warn('whop-webhook: PRICE MISMATCH', {
+      payment: p.id,
+      intended_cents: priceCents,
+      whop_subtotal_raw: p.subtotal,
+      whop_total_raw: p.total,
+    })
+  }
+
+  // Platform fee % (default 30 => 70% to creator)
+  const { data: settings } = await admin
+    .from('platform_settings')
+    .select('platform_fee_percent')
+    .eq('id', 1)
+    .maybeSingle()
+  let pct = Number(settings?.platform_fee_percent ?? 30)
+  if (!Number.isFinite(pct)) pct = 30
+  pct = Math.min(100, Math.max(0, pct))
+  const pctBp = Math.round(pct * 100)
+
+  const feeCents = Math.floor((priceCents * pctBp + 5000) / 10000)
+  const netCents = priceCents - feeCents
+
+  const amountPaid = priceCents / 100
+  const platformFee = feeCents / 100
+  const netToCreator = netCents / 100
+  const creatorId =
+    typeof m.creator_id === 'string' && UUID_RE.test(m.creator_id)
+      ? m.creator_id
+      : (contentRow?.creator_id as string | null) ?? null
+
+  // Check duplicate buyer + content purchase
+  let isSecondPayment = false
+  if (buyerId || buyerEmail) {
+    let dupQuery = admin
+      .from('purchases')
+      .select('payment_id')
+      .eq('content_id', m.content_id)
+      .neq('payment_id', p.id)
+      .limit(1)
+    dupQuery = buyerId
+      ? dupQuery.eq('buyer_id', buyerId)
+      : dupQuery.is('buyer_id', null).eq('buyer_email', buyerEmail as string)
+    const { data: dup } = await dupQuery
+    if (dup && dup.length > 0) {
+      isSecondPayment = true
+      console.warn('whop-webhook: DUPLICATE PURCHASE, review for refund', {
+        payment: p.id,
+        existing: dup[0].payment_id,
+      })
+    }
+  }
+
+  // Record purchase
+  const { error } = await admin.from('purchases').upsert(
+    {
+      buyer_id: buyerId,
+      content_id: m.content_id,
+      payment_id: p.id,
+      payment_provider: 'whop',
+      amount_paid: amountPaid,
+      gross_paid: totalCents !== null ? totalCents / 100 : null,
+      platform_fee: platformFee,
+      net_to_creator: netToCreator,
+      buyer_email: buyerEmail,
+      claim_hash: claimHash,
+      access_token_hash: tokenHash,
+      expires_at: expiresAt,
+      status: 'active',
+    },
+    { onConflict: 'payment_id', ignoreDuplicates: true },
+  )
+
+  if (error) {
+    console.error('whop-webhook: db error', error)
+    await logEvent({
+      event_type: eventType,
+      payment_id: p.id,
+      status: 'failed',
+      error: `db error: ${error.message}`,
+      payload,
+    })
+    return new Response('db error', { status: 500 })
+  }
+
+  // Record in transactions table if applicable
+  if (creatorId) {
+    const { data: existingTx } = await admin
+      .from('transactions')
+      .select('id')
+      .eq('payment_id', p.id)
+      .maybeSingle()
+    if (!existingTx) {
+      await admin
+        .from('transactions')
+        .insert({
+          payment_id: p.id,
+          order_id: typeof m.order_id === 'string' && m.order_id ? m.order_id : p.id,
+          creator_id: creatorId,
+          content_id: m.content_id,
+          buyer_id: buyerId,
+          event_type: 'payment.succeeded',
+          checkout_type: 'content',
+          amount: amountPaid,
+          currency: 'usd',
+          status: 'succeeded',
+          creator_earnings: netToCreator,
+          platform_earnings: platformFee,
+          raw_payload: payload,
+        })
+        .then(({ error: txErr }) => {
+          if (txErr) console.warn('whop-webhook: transactions insert skipped/failed', txErr.message)
+        })
+    }
+  }
+
+  console.log('whop-webhook: purchase recorded', {
+    payment: p.id,
+    guest: isGuest,
+    price_cents: priceCents,
+    gross_cents: totalCents,
+    fee_cents: feeCents,
+    net_cents: netCents,
+  })
+
+  // Send buyer access email (for guest checkouts)
+  let emailProblem: string | null = null
+  if (isGuest) {
+    if (!rawToken || !tokenHash || !buyerEmail) {
+      emailProblem = 'guest purchase without an email address: no access link was sent'
+    } else {
+      const { data: stored } = await admin
+        .from('purchases')
+        .select('id')
+        .eq('payment_id', p.id)
+        .eq('access_token_hash', tokenHash)
+        .limit(1)
+      if (stored && stored.length > 0) {
+        const link = `${SITE_URL}/access?token=${encodeURIComponent(rawToken)}`
+        const sent = await sendAccessEmail(buyerEmail, link, contentRow?.title ?? null)
+        if (sent.ok) {
+          console.log('whop-webhook: access email sent', { payment: p.id })
+        } else {
+          emailProblem = `access email failed: ${sent.error ?? 'unknown error'}`
+        }
       }
     }
-
-    const payload = JSON.parse(rawBody) as JsonRecord;
-    await processWebhookEvent(payload);
-    return ok();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal error";
-    console.error("[whop-webhook] error", message);
-    return ok();
   }
-});
+
+  // Send creator sale alert email
+  await sendSaleAlertEmail(creatorId, contentRow?.title ?? null, amountPaid, platformFee, netToCreator)
+
+  const notes: string[] = []
+  if (unreachable) notes.push('no buyer_id, email or claim: this purchase cannot be unlocked by anyone')
+  if (emailProblem) notes.push(emailProblem + (claimHash ? " (the buyer's browser can still unlock it)" : ''))
+  if (isSecondPayment) notes.push('second payment for the same buyer and content: review for refund')
+
+  if (notes.length > 0) {
+    await logEvent({ event_type: eventType, payment_id: p.id, status: 'needs_review', error: notes.join('; '), payload })
+  } else {
+    await logEvent({ event_type: eventType, payment_id: p.id, status: 'recorded', payload })
+  }
+
+  return new Response('ok')
+})
