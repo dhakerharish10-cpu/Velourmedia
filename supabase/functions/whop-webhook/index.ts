@@ -243,6 +243,7 @@ async function logEvent(row: {
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 })
 
+  try {
   const secret = Deno.env.get('WHOP_WEBHOOK_SECRET')
   if (!secret) {
     console.error('whop-webhook: WHOP_WEBHOOK_SECRET is not set')
@@ -487,7 +488,7 @@ Deno.serve(async (req) => {
       .eq('payment_id', p.id)
       .maybeSingle()
     if (!existingTx) {
-      await admin
+      const { error: txErr } = await admin
         .from('transactions')
         .insert({
           payment_id: p.id,
@@ -504,9 +505,7 @@ Deno.serve(async (req) => {
           platform_earnings: platformFee,
           raw_payload: payload,
         })
-        .then(({ error: txErr }) => {
-          if (txErr) console.warn('whop-webhook: transactions insert skipped/failed', txErr.message)
-        })
+      if (txErr) console.warn('whop-webhook: transactions insert skipped/failed', txErr.message)
     }
   }
 
@@ -519,28 +518,42 @@ Deno.serve(async (req) => {
     net_cents: netCents,
   })
 
-  // Send buyer access email (for guest checkouts)
+  // Send buyer access email to ALL buyers (guest and logged-in)
   let emailProblem: string | null = null
-  if (isGuest) {
-    if (!rawToken || !tokenHash || !buyerEmail) {
-      emailProblem = 'guest purchase without an email address: no access link was sent'
-    } else {
-      const { data: stored } = await admin
-        .from('purchases')
-        .select('id')
-        .eq('payment_id', p.id)
-        .eq('access_token_hash', tokenHash)
-        .limit(1)
-      if (stored && stored.length > 0) {
-        const link = `${SITE_URL}/access?token=${encodeURIComponent(rawToken)}`
-        const sent = await sendAccessEmail(buyerEmail, link, contentRow?.title ?? null)
-        if (sent.ok) {
-          console.log('whop-webhook: access email sent', { payment: p.id })
-        } else {
-          emailProblem = `access email failed: ${sent.error ?? 'unknown error'}`
+  if (buyerEmail) {
+    if (isGuest) {
+      // Guest: use the token-based access link
+      if (rawToken && tokenHash) {
+        const { data: stored } = await admin
+          .from('purchases')
+          .select('id')
+          .eq('payment_id', p.id)
+          .eq('access_token_hash', tokenHash)
+          .limit(1)
+        if (stored && stored.length > 0) {
+          const link = `${SITE_URL}/access?token=${encodeURIComponent(rawToken)}`
+          const sent = await sendAccessEmail(buyerEmail, link, contentRow?.title ?? null)
+          if (sent.ok) {
+            console.log('whop-webhook: guest access email sent', { payment: p.id })
+          } else {
+            emailProblem = `access email failed: ${sent.error ?? 'unknown error'}`
+          }
         }
+      } else {
+        emailProblem = 'guest purchase without an email address: no access link was sent'
+      }
+    } else {
+      // Logged-in buyer: send a link to the content in their library
+      const contentLink = `${SITE_URL}/u/${m.content_id}`
+      const sent = await sendAccessEmail(buyerEmail, contentLink, contentRow?.title ?? null)
+      if (sent.ok) {
+        console.log('whop-webhook: buyer access email sent', { payment: p.id })
+      } else {
+        emailProblem = `buyer email failed: ${sent.error ?? 'unknown error'}`
       }
     }
+  } else if (isGuest) {
+    emailProblem = 'guest purchase without an email address: no access link was sent'
   }
 
   // Send creator sale alert email
@@ -558,4 +571,11 @@ Deno.serve(async (req) => {
   }
 
   return new Response('ok')
+  } catch (err) {
+    console.error('whop-webhook: unhandled error', err)
+    try {
+      await logEvent({ event_type: 'unknown', status: 'failed', error: err instanceof Error ? err.message : String(err) })
+    } catch {}
+    return new Response('internal error', { status: 500 })
+  }
 })

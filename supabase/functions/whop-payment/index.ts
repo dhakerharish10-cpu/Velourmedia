@@ -58,6 +58,26 @@ async function requireUser(req: Request) {
   return data.user;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function getPlatformFeePercent(supabase: ReturnType<typeof getServiceClient>): Promise<number> {
+  const { data: settings } = await supabase
+    .from('platform_settings')
+    .select('platform_fee_percent')
+    .eq('id', 1)
+    .maybeSingle();
+  let pct = Number(settings?.platform_fee_percent ?? 30);
+  if (!Number.isFinite(pct)) pct = 30;
+  return Math.min(100, Math.max(0, pct));
+}
+
 async function sendSaleAlertEmail(
   supabase: ReturnType<typeof getServiceClient>,
   intent: JsonRecord,
@@ -96,9 +116,12 @@ async function sendSaleAlertEmail(
 
     const grossAmount = Number(intent.amount).toFixed(2);
     const netAmount = netToCreator.toFixed(2);
-    const creatorName = creator.display_name || creator.username || "Creator";
+    const creatorName = escapeHtml(creator.display_name || creator.username || "Creator");
     const appUrl = Deno.env.get("APP_URL") || "https://velourmedia.site";
     const dashboardLink = `${appUrl}/dashboard`;
+    const feeAmount = (Number(grossAmount) - Number(netAmount)).toFixed(2);
+    const feePct = Math.round((Number(feeAmount) / Number(grossAmount)) * 100) || 0;
+    const netPct = 100 - feePct;
 
     const subject = contentType === "tip"
       ? `New Tip Alert! You earned ${netAmount} USD on VelourMedia`
@@ -111,10 +134,10 @@ async function sendSaleAlertEmail(
         </div>
         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-top: 16px;">
           <table style="width: 100%; font-size: 14px; color: #334155;">
-            <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">$${grossAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (30%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-$${(Number(grossAmount) - Number(netAmount)).toFixed(2)}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (70%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">$${netAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${contentTitle}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Sale Amount</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${grossAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Platform Fee (${feePct}%)</td><td style="padding: 8px 0; text-align: right; color: #ef4444;">-${feeAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b; border-top: 1px solid #f1f5f9;">Your Net Earnings (${netPct}%)</td><td style="padding: 8px 0; text-align: right; font-weight: 700; color: #059669; border-top: 1px solid #f1f5f9;">${netAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #64748b;">Post Title</td><td style="padding: 8px 0; text-align: right;">${escapeHtml(contentTitle)}</td></tr>
           </table>
           <a href="${dashboardLink}" style="display: inline-block; margin-top: 20px; padding: 12px 28px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 14px;">Go to Dashboard</a>
         </div>
@@ -128,14 +151,16 @@ async function sendSaleAlertEmail(
       return;
     }
 
+    const resendFrom = Deno.env.get("RESEND_FROM") ?? "VelourMedia <noreply@velourmedia.site>";
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
-        from: "VelourMedia <noreply@velourmedia.site>",
+        from: resendFrom,
         to: [creatorEmail],
         subject,
         html,
@@ -235,8 +260,9 @@ async function activatePurchase(
   whopNetAmount?: number,
 ): Promise<boolean> {
   const baseAmount = whopNetAmount && whopNetAmount > 0 ? whopNetAmount : Number(intent.amount);
-  const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
-  const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
+  const feePct = await getPlatformFeePercent(supabase);
+  const platformFee = Math.round(baseAmount * (feePct / 100) * 100) / 100;
+  const netToCreator = Math.round(baseAmount * (1 - feePct / 100) * 100) / 100;
 
   const creatorId = typeof intent.creator_id === "string" ? intent.creator_id : null;
   const contentId = typeof intent.content_id === "string" ? intent.content_id : null;
@@ -294,6 +320,7 @@ async function activatePurchase(
 
     // Buyer ko email receipt aur magic access token bhejna
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const resendFrom = Deno.env.get("RESEND_FROM") ?? "VelourMedia <noreply@velourmedia.site>";
     if (buyerEmail && resendApiKey) {
       const appBase = Deno.env.get("APP_URL") || "https://velourmedia.site";
       const accessLink = `${appBase}/access?token=${guestAccessToken}`;
@@ -305,8 +332,9 @@ async function activatePurchase(
             "Authorization": `Bearer ${resendApiKey}`,
             "Content-Type": "application/json",
           },
+          signal: AbortSignal.timeout(10000),
           body: JSON.stringify({
-            from: "VelourMedia <noreply@velourmedia.site>",
+            from: resendFrom,
             to: [buyerEmail],
             subject: "Your Content Access Link - VelourMedia",
             html: `
@@ -590,15 +618,92 @@ async function confirmPayment(req: Request, orderId: string): Promise<Response> 
     if (!user || user.id !== intentRecord.buyer_id) return json({ error: "Authentication required." }, 401);
   }
 
-  const paymentId = typeof intentRecord.payment_id === "string" ? intentRecord.payment_id : `fallback_${orderId}`;
-  const buyerEmail = typeof req.headers.get("X-Buyer-Email") === "string" ? req.headers.get("X-Buyer-Email") : null;
+  // ── SECURITY: Verify payment status with the Whop API before granting access ──
+  // Never trust unverified client calls. The payment_id on the intent (if present)
+  // is verified against Whop's API. If no payment_id yet, we check whether the
+  // webhook has already recorded this purchase (webhook is the primary path).
+  const paymentId = typeof intentRecord.payment_id === "string" ? intentRecord.payment_id : null;
 
-  const activated = await activatePurchase(supabase, intentRecord, paymentId, Number(intentRecord.amount), buyerEmail);
+  if (paymentId && !paymentId.startsWith("fallback_")) {
+    const apiKey = Deno.env.get("WHOP_API_KEY");
+    if (!apiKey) return json({ error: "Server cannot verify payment (WHOP_API_KEY missing)." }, 500);
+
+    let whopVerified = false;
+    try {
+      const whopRes = await fetch(`${WHOP_API_BASE}/payments/${paymentId}`, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (whopRes.ok) {
+        const whopPayment = await whopRes.json().catch(() => ({})) as JsonRecord;
+        const whopStatus = typeof whopPayment.status === "string" ? whopPayment.status : "";
+        if (["succeeded", "paid", "complete", "completed"].includes(whopStatus)) {
+          whopVerified = true;
+        } else {
+          return json({ error: `Payment not yet confirmed (Whop status: ${whopStatus}).` }, 402);
+        }
+      } else if (whopRes.status === 404) {
+        return json({ error: "Payment not found at Whop." }, 404);
+      } else {
+        console.warn("[whop] confirm-payment: Whop API returned", whopRes.status);
+      }
+    } catch (verifyErr) {
+      console.error("[whop] confirm-payment: Whop verification error", verifyErr);
+      // Don't grant access if we can't verify
+      return json({ error: "Unable to verify payment with Whop. Please try again." }, 502);
+    }
+
+    if (!whopVerified) {
+      return json({ error: "Payment could not be verified." }, 402);
+    }
+  } else {
+    // No payment_id on the intent yet — check if the webhook already recorded
+    // a purchase for this order/content. If it did, the webhook (verified path)
+    // already granted access, so we can safely confirm.
+    const contentId = typeof intentRecord.content_id === "string" ? intentRecord.content_id : null;
+    if (contentId) {
+      const { data: existingPurchase } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("content_id", contentId)
+        .eq("status", "active")
+        .limit(1);
+      if (!existingPurchase || existingPurchase.length === 0) {
+        return json({ error: "Payment has not been received yet. Please complete checkout first." }, 402);
+      }
+    } else {
+      return json({ error: "No payment reference found for this checkout." }, 402);
+    }
+  }
+
+  // Get buyer email: prefer the purchases record over the client header
+  let buyerEmail: string | null = null;
+  const contentIdForLookup = typeof intentRecord.content_id === "string" ? intentRecord.content_id : null;
+  if (contentIdForLookup) {
+    const { data: purchaseRow } = await supabase
+      .from("purchases")
+      .select("buyer_email")
+      .eq("content_id", contentIdForLookup)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (purchaseRow?.buyer_email) buyerEmail = purchaseRow.buyer_email;
+  }
+  // Only fall back to the header if no verified email exists in the DB
+  if (!buyerEmail) {
+    const headerEmail = req.headers.get("X-Buyer-Email");
+    if (typeof headerEmail === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(headerEmail)) {
+      buyerEmail = headerEmail.trim().toLowerCase();
+    }
+  }
+
+  const finalPaymentId = paymentId ?? `fallback_${orderId}`;
+  const activated = await activatePurchase(supabase, intentRecord, finalPaymentId, Number(intentRecord.amount), buyerEmail);
   if (!activated) return json({ error: "Failed to confirm purchase." }, 500);
 
   const { error: updateError } = await supabase
     .from("nowpayments_checkout_intents")
-    .update({ status: "confirmed", payment_id: paymentId, updated_at: new Date().toISOString() })
+    .update({ status: "confirmed", payment_id: finalPaymentId, updated_at: new Date().toISOString() })
     .eq("id", intentRecord.id);
   if (updateError) console.error("[whop] confirm-payment intent update failed", updateError);
 
@@ -723,8 +828,9 @@ async function syncWhopPayments(req: Request): Promise<Response> {
         .maybeSingle();
       if (existing) { skipped++; continue; }
 
-      const platformFee = Math.round(baseAmount * 0.3 * 100) / 100;
-      const netToCreator = Math.round(baseAmount * 0.7 * 100) / 100;
+      const feePct = await getPlatformFeePercent(supabase);
+      const platformFee = Math.round(baseAmount * (feePct / 100) * 100) / 100;
+      const netToCreator = Math.round(baseAmount * (1 - feePct / 100) * 100) / 100;
 
       await supabase.from("transactions").insert({
         payment_id: paymentId,

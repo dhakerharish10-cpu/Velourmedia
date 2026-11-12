@@ -217,9 +217,9 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
           media_url: m.url,
           media_type: m.type,
           display_order: i,
-          preview_url: isPaid ? (previewUrls[i] ?? null) : null,
         }));
-        await supabase.from('content_media').insert(mediaRecords);
+        const { error: mediaError } = await supabase.from('content_media').insert(mediaRecords);
+        if (mediaError) throw mediaError;
       }
 
       addToast('Content published successfully!', 'success');
