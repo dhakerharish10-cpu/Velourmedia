@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
-import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye } from 'lucide-react';
+import { Upload, X, Loader2, ImageIcon, Video, DollarSign, Check, Eye, ShieldCheck } from 'lucide-react';
 import { KycVerification } from './KycVerification';
-import { findRestrictedKeyword } from '../lib/content-rules';
+import { findRestrictedKeyword, restrictedKeywordMessage } from '../lib/contentRules';
 
 interface MediaFile {
   file: File;
@@ -11,11 +11,21 @@ interface MediaFile {
   type: 'image' | 'video';
 }
 
-const MAX_IMAGE_SIZE = 50 * 1024 * 1024;
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
+// Exact text of a Supabase Storage / Postgres error (message, details, hint and code)
+function describeError(e: { message?: string; code?: string; details?: string | null; hint?: string | null } | null | undefined): string {
+  if (!e) return 'unknown error';
+  const parts: string[] = [e.message ?? 'unknown error'];
+  if (e.details) parts.push(e.details);
+  if (e.hint) parts.push(`Hint: ${e.hint}`);
+  return parts.join(' ') + (e.code ? ` (${e.code})` : '');
+}
+
+// Paid posts: build a tiny low-resolution preview (about 96px) so the original never needs a public URL
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     p,
@@ -49,8 +59,8 @@ async function makeTinyPreview(file: File, type: 'image' | 'video'): Promise<Blo
         video.onerror = () => rej(new Error('video load failed'));
       }), 8000);
       await withTimeout(new Promise<void>((res) => {
+        video.onseeked = () => res();
         video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
-        res();
       }), 5000);
       source = video; w = video.videoWidth; h = video.videoHeight;
     }
@@ -64,6 +74,7 @@ async function makeTinyPreview(file: File, type: 'image' | 'video'): Promise<Blo
     ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
     return await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), 'image/jpeg', 0.5));
   } catch (e) {
+    console.warn('Preview generation failed:', e);
     return null;
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -99,39 +110,59 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
       if (!isImage && !isVideo) {
-        errors.push(`${file.name}: not a valid image or video.`);
+        errors.push(`${file.name}: not a valid image or video file.`);
         return;
       }
       if (isImage && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        errors.push(`${file.name}: unsupported format.`);
+        errors.push(`${file.name}: unsupported image format. Use JPG, PNG, WebP, GIF, or AVIF.`);
         return;
       }
       if (isVideo && !ALLOWED_VIDEO_TYPES.includes(file.type)) {
-        errors.push(`${file.name}: unsupported video format.`);
+        errors.push(`${file.name}: unsupported video format. Use MP4, WebM, or MOV.`);
         return;
       }
       const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
       if (file.size > maxSize) {
-        errors.push(`${file.name} is too large.`);
+        const limitMB = Math.round(maxSize / (1024 * 1024));
+        errors.push(`${file.name}: file is too large. Max ${limitMB} MB for ${isImage ? 'images' : 'videos'}.`);
         return;
       }
-      newFiles.push({ file, preview: URL.createObjectURL(file), type: isImage ? 'image' : 'video' });
+      newFiles.push({
+        file,
+        preview: URL.createObjectURL(file),
+        type: isImage ? 'image' : 'video',
+      });
     });
     errors.forEach((msg) => addToast(msg, 'error'));
-    if (newFiles.length > 0) setMediaFiles((prev) => [...prev, ...newFiles]);
+    if (newFiles.length === 0) {
+      if (errors.length === 0) addToast('Please select image or video files.', 'error');
+      return;
+    }
+    setMediaFiles((prev) => [...prev, ...newFiles]);
   }, [addToast]);
+
+  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(e.target.files);
+  }, [handleFiles]);
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+
+  const removeFile = useCallback((index: number) => {
+    setMediaFiles((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || mediaFiles.length === 0) return;
 
-    // Strict adult content restriction check
-    if (findRestrictedKeyword(title, description)) {
-      addToast('Adult content on this site is restricted', 'error');
-      return;
-    }
-
-    const priceNum = parseFloat(price || '0');
+    const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum < 0) {
       addToast('Please enter a valid price.', 'error');
       return;
@@ -140,25 +171,44 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
       addToast('Please enter a title.', 'error');
       return;
     }
+    const restricted = findRestrictedKeyword(title, description);
+    if (restricted) {
+      addToast(restrictedKeywordMessage(restricted), 'error');
+      return;
+    }
 
     setUploading(true);
     const uploaded: { bucket: string; path: string }[] = [];
     let createdContentId: string | null = null;
 
     try {
-      const creatorId = activeProfileId || profiles.find((p) => p.is_primary)?.id || profiles[0]?.id || user.id;
+      const profileId = activeProfileId || profiles.find((p) => p.is_primary)?.id || profiles[0]?.id;
+      if (!profileId) {
+        addToast('No creator profile found. Please complete your profile setup first.', 'error');
+        setUploading(false);
+        return;
+      }
+      const creatorId = profileId;
       const uploadedUrls: { url: string; type: 'image' | 'video' }[] = [];
+
       const isPaid = priceNum > 0;
       const mediaBucket = isPaid ? 'paid-media' : 'creator-media';
 
-      for (const media of mediaFiles) {
+      for (let index = 0; index < mediaFiles.length; index++) {
+        const media = mediaFiles[index];
         const fileExt = media.file.name.split('.').pop() || (media.type === 'image' ? 'jpg' : 'mp4');
-        const fileName = `${creatorId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const fileName = `${creatorId}/${Date.now()}-${index}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from(mediaBucket)
-          .upload(fileName, media.file, { contentType: media.file.type, upsert: false });
-        if (uploadError) throw new Error(uploadError.message);
-
+          .upload(fileName, media.file, {
+            contentType: media.file.type || (media.type === 'image' ? 'image/jpeg' : 'video/mp4'),
+            cacheControl: '3600',
+            upsert: false,
+          });
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          throw new Error(`Failed to upload ${media.file.name}: ${describeError(uploadError as any)}`);
+        }
         uploaded.push({ bucket: mediaBucket, path: fileName });
         if (isPaid) {
           uploadedUrls.push({ url: fileName, type: media.type });
@@ -169,17 +219,24 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
       }
 
       const firstMedia = uploadedUrls[0];
-      let thumbnailUrl: string | null = !isPaid && firstMedia.type === 'image' ? firstMedia.url : null;
+      const primaryType = firstMedia.type;
+      let thumbnailUrl: string | null = null;
       const previewUrls: (string | null)[] = [];
-
-      if (isPaid) {
-        for (const m of mediaFiles) {
+      if (!isPaid) {
+        thumbnailUrl = primaryType === 'image' ? firstMedia.url : (uploadedUrls.find(u => u.type === 'image')?.url || null);
+      } else {
+        for (let index = 0; index < mediaFiles.length; index++) {
+          const m = mediaFiles[index];
           let previewUrl: string | null = null;
           const blob = await makeTinyPreview(m.file, m.type);
           if (blob) {
-            const thumbPath = `${creatorId}/thumbs/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-            const { error: thumbErr } = await supabase.storage.from('creator-media').upload(thumbPath, blob, { contentType: 'image/jpeg' });
-            if (!thumbErr) {
+            const thumbPath = `${creatorId}/thumbs/${Date.now()}-${index}-${Math.random().toString(36).slice(2)}.jpg`;
+            const { error: thumbError } = await supabase.storage
+              .from('creator-media')
+              .upload(thumbPath, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+            if (thumbError) {
+              console.warn('Preview upload failed:', thumbError.message);
+            } else {
               uploaded.push({ bucket: 'creator-media', path: thumbPath });
               previewUrl = supabase.storage.from('creator-media').getPublicUrl(thumbPath).data.publicUrl;
             }
@@ -196,43 +253,68 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
           title: title.trim(),
           description: description.trim() || null,
           media_url: firstMedia.url,
-          media_type: firstMedia.type,
+          media_type: primaryType,
           thumbnail_url: thumbnailUrl,
           price: priceNum,
+          is_adult: false,
           is_published: true,
           media_count: uploadedUrls.length,
           blur_level: blurPercent <= 33 ? 'low' : blurPercent >= 80 ? 'hard' : 'medium',
           blur_percent: blurPercent,
-          is_adult: false,
         })
         .select('id')
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError || !contentData) {
+        console.error('Content insert error:', insertError);
+        throw new Error(`Could not save post: ${insertError ? describeError(insertError as any) : 'no row returned'}`);
+      }
       createdContentId = contentData.id;
 
       if (uploadedUrls.length > 1) {
         const mediaRecords = uploadedUrls.map((m, i) => ({
-          content_id: createdContentId,
+          content_id: contentData.id,
           media_url: m.url,
           media_type: m.type,
           display_order: i,
+          preview_url: isPaid ? (previewUrls[i] ?? null) : null,
         }));
-        const { error: mediaError } = await supabase.from('content_media').insert(mediaRecords);
-        if (mediaError) throw mediaError;
+        const { error: mediaError } = await supabase
+          .from('content_media')
+          .insert(mediaRecords);
+        if (mediaError) {
+          console.error('content_media insert error:', mediaError);
+          throw new Error(`Could not save extra media: ${describeError(mediaError as any)}`);
+        }
       }
 
-      addToast('Content published successfully!', 'success');
-      resetForm();
-      await refreshMyContent();
-      await refreshFeed();
-      onDone?.();
-    } catch (err: any) {
-      if (createdContentId) await supabase.from('content').delete().eq('id', createdContentId);
-      for (const bucket of Array.from(new Set(uploaded.map((u) => u.bucket)))) {
-        await supabase.storage.from(bucket).remove(uploaded.filter((u) => u.bucket === bucket).map((u) => u.path));
+      addToast(`${uploadedUrls.length} file${uploadedUrls.length > 1 ? 's' : ''} uploaded successfully!`, 'success');
+
+      try {
+        resetForm();
+        await refreshMyContent();
+        await refreshFeed();
+      } catch (refreshErr) {
+        console.error('Post-upload refresh failed:', refreshErr);
       }
-      addToast(err?.message || 'Upload failed.', 'error');
+
+      onDone?.();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string } | null)?.message || 'Upload failed.';
+      console.error('Upload failed:', err);
+      const gateRejected = /row-level security/i.test(message);
+      try {
+        if (createdContentId) await supabase.from('content').delete().eq('id', createdContentId);
+        for (const bucket of Array.from(new Set(uploaded.map((u) => u.bucket)))) {
+          await supabase.storage.from(bucket).remove(uploaded.filter((u) => u.bucket === bucket).map((u) => u.path));
+        }
+      } catch (cleanupErr) {
+        console.error('Cleanup after failed upload failed:', cleanupErr);
+      }
+      addToast(gateRejected ? `Your account must be verified before you can post. (${message})` : message, 'error');
     } finally {
       setUploading(false);
     }
@@ -250,39 +332,48 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
           onClick={() => fileInputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+          onDrop={onDrop}
           className={`relative cursor-pointer rounded-xl border-2 border-dashed transition-all p-6 text-center ${
-            dragOver ? 'border-indigo-500 bg-indigo-500/5' : 'border-slate-300 dark:border-zinc-700'
+            dragOver ? 'border-indigo-500 bg-indigo-500/5' : 'border-slate-300 dark:border-zinc-700 hover:border-slate-400 dark:hover:border-zinc-600'
           }`}
         >
           <div className="flex flex-col items-center gap-2">
-            <Upload size={22} className="text-slate-400" />
-            <p className="text-sm font-medium text-slate-700 dark:text-zinc-200">Tap to select media</p>
-            <p className="text-xs text-slate-400">Photos or videos</p>
+            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-zinc-800 flex items-center justify-center">
+              <Upload size={22} className="text-slate-400 dark:text-zinc-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 dark:text-zinc-200">Tap to select media</p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">Select multiple images and/or videos</p>
+            </div>
           </div>
           <input
             ref={fileInputRef}
             type="file"
             multiple
             accept="image/*,video/*"
-            onChange={(e) => handleFiles(e.target.files)}
-            className="hidden"
+            onChange={onFileChange}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            aria-label="Upload media files"
           />
         </div>
 
         {mediaFiles.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {mediaFiles.map((media, index) => (
-              <div key={index} className="relative group rounded-lg overflow-hidden bg-slate-100 aspect-square">
+              <div key={index} className="relative group rounded-lg overflow-hidden bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-zinc-700/50 aspect-square">
                 {media.type === 'image' ? (
-                  <img src={media.preview} alt="" className="w-full h-full object-cover" />
+                  <img src={media.preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
                 ) : (
                   <video src={media.preview} className="w-full h-full object-cover" muted />
                 )}
+                <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white flex items-center gap-1">
+                  {media.type === 'image' ? <ImageIcon size={8} /> : <Video size={8} />}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setMediaFiles((prev) => prev.filter((_, i) => i !== index))}
-                  className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-white"
+                  onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                  className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-white hover:bg-rose-500/80 transition-colors"
+                  aria-label="Remove file"
                 >
                   <X size={14} />
                 </button>
@@ -292,135 +383,204 @@ function UploadForm({ onDone }: { onDone?: () => void }) {
         )}
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Title</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Title</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Post title..."
-            className="w-full rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 px-4 py-2.5 text-sm text-slate-900 dark:text-white"
+            placeholder="Give your content a title..."
+            className="w-full rounded-xl bg-slate-50 dark:bg-zinc-950 dark:bg-zinc-900/80 border border-slate-300 dark:border-zinc-700/50 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Description (optional)</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Description (optional)</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Post description..."
+            placeholder="Describe your content..."
             rows={2}
-            className="w-full rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 px-4 py-2.5 text-sm text-slate-900 dark:text-white resize-none"
+            className="w-full rounded-xl bg-slate-50 dark:bg-zinc-950 dark:bg-zinc-900/80 border border-slate-300 dark:border-zinc-700/50 px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all resize-none"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Price (USD $)</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Price (USD $)</label>
           <div className="relative">
             <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="0 (Free)"
+              placeholder="4.99"
               min="0"
               step="0.01"
-              className="w-full rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-white"
+              inputMode="decimal"
+              className="w-full rounded-xl bg-zinc-900/80 border border-zinc-700/50 pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
             />
           </div>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">Set to 0 for free content. Applies to all {mediaFiles.length || 0} file{mediaFiles.length !== 1 ? 's' : ''}.</p>
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-slate-500">Preview Blur ({blurPercent}%)</label>
+            <label className="text-xs font-medium text-slate-500 dark:text-zinc-400">Preview Blur (0-100%)</label>
+            <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 tabular-nums">{blurPercent}%</span>
           </div>
           <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-zinc-700">
+              {mediaFiles[0]?.type === 'image' ? (
+                <img
+                  src={mediaFiles[0].preview}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  style={{ filter: `blur(${(blurPercent / 100) * 24}px)` }}
+                />
+              ) : (
+                <Eye size={16} className="text-slate-400 dark:text-zinc-500" style={{ filter: `blur(${(blurPercent / 100) * 24}px)` }} />
+              )}
+            </div>
             <input
               type="range"
               min="0"
               max="100"
               value={blurPercent}
               onChange={(e) => setBlurPercent(Number(e.target.value))}
-              className="flex-1 accent-indigo-500"
+              className="flex-1 accent-indigo-500 cursor-pointer"
             />
           </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-[10px] text-slate-400 dark:text-zinc-500">Clear</span>
+            <span className="text-[10px] text-slate-400 dark:text-zinc-500">Max blur</span>
+          </div>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1.5">Controls how blurred the preview thumbnail appears to non-purchasers. 0% = fully visible, 100% = heavily blurred.</p>
         </div>
 
         <button
           type="submit"
           disabled={mediaFiles.length === 0 || uploading || !title.trim()}
-          className="w-full rounded-xl bg-gradient-brand text-white font-semibold py-2.5 disabled:opacity-40 flex items-center justify-center gap-2"
+          className="w-full rounded-xl bg-gradient-brand text-white font-semibold py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {uploading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-          {uploading ? 'Uploading...' : `Publish ${mediaFiles.length} File${mediaFiles.length !== 1 ? 's' : ''}`}
+          {uploading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Uploading {mediaFiles.length} file{mediaFiles.length !== 1 ? 's' : ''}...
+            </>
+          ) : (
+            <>
+              <Check size={16} />
+              Publish {mediaFiles.length > 0 ? `${mediaFiles.length} File${mediaFiles.length !== 1 ? 's' : ''}` : 'Content'}
+            </>
+          )}
         </button>
       </form>
     </div>
   );
 }
 
+type GateState =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'verified' }
+  | { kind: 'pending' }
+  | { kind: 'unverified' }
+  | { kind: 'rejected'; reason: string | null };
+
 export function UploadContent({ onDone }: { onDone?: () => void }) {
   const { user, activeProfileId, profiles, refreshProfiles } = useStore();
-  const [gate, setGate] = useState<'loading' | 'verified' | 'pending' | 'unverified'>('loading');
+  const [gate, setGate] = useState<GateState>({ kind: 'loading' });
+  const [checking, setChecking] = useState(false);
 
-  const profileId = activeProfileId || profiles[0]?.id || user?.id || '';
+  const profileId =
+    activeProfileId || profiles.find((p) => p.is_primary)?.id || profiles[0]?.id || user?.id || null;
 
   const loadGate = useCallback(async () => {
     if (!user) return;
-    try {
-      // User ke main account/Gmail level par check karo
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, role, kyc_status')
-        .or(`id.eq.${user.id},owner_id.eq.${user.id}`);
+    setChecking(true);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, role, kyc_status')
+      .or(`id.eq.${user.id},owner_id.eq.${user.id}`);
 
-      if (error || !data) {
-        setGate('unverified');
-        return;
-      }
-
-      // Agar is account ka koi bhi profile verified/approved/admin hai toh direct post allow
-      const isAnyVerified = data.some(
-        (p) => p.role === 'admin' || p.kyc_status === 'verified' || p.kyc_status === 'approved'
-      );
-
-      if (isAnyVerified) {
-        setGate('verified');
-      } else if (data.some((p) => p.kyc_status === 'pending')) {
-        setGate('pending');
-      } else {
-        setGate('unverified');
-      }
-    } catch {
-      setGate('unverified');
+    if (error || !data) {
+      console.error('Could not check verification status:', error?.message);
+      setGate({ kind: 'error' });
+      setChecking(false);
+      return;
     }
+
+    const rows = data as { id: string; role: string | null; kyc_status: string | null }[];
+    if (rows.some((r) => r.role === 'admin' || r.kyc_status === 'verified')) {
+      setGate({ kind: 'verified' });
+    } else if (rows.some((r) => r.kyc_status === 'pending')) {
+      setGate({ kind: 'pending' });
+    } else if (rows.some((r) => r.kyc_status === 'rejected')) {
+      const { data: latest } = await supabase
+        .from('creator_kyc')
+        .select('rejection_reason')
+        .eq('status', 'rejected')
+        .order('reviewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setGate({ kind: 'rejected', reason: latest?.rejection_reason ?? null });
+    } else {
+      setGate({ kind: 'unverified' });
+    }
+    setChecking(false);
   }, [user]);
 
   useEffect(() => {
     loadGate();
   }, [loadGate]);
 
-  if (!user || gate === 'loading') {
+  if (!user) return null;
+
+  if (gate.kind === 'loading') {
     return (
-      <div className="p-10 text-center">
-        <Loader2 size={24} className="animate-spin text-indigo-500 mx-auto" />
+      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-10 text-center">
+        <Loader2 size={26} className="animate-spin text-indigo-500 mx-auto" />
+        <p className="text-sm text-slate-400 dark:text-zinc-500 mt-3">Checking your account...</p>
       </div>
     );
   }
 
-  // Agar verified hai toh seedha upload form dikhao, koi popup nahi
-  if (gate === 'verified') {
-    return <UploadForm onDone={onDone} />;
+  if (gate.kind === 'error') {
+    return (
+      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-6 text-center">
+        <ShieldCheck size={26} className="text-slate-400 mx-auto mb-2" />
+        <p className="text-sm text-slate-600 dark:text-zinc-300">We could not check your verification status.</p>
+        <button
+          type="button"
+          onClick={loadGate}
+          className="mt-4 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (gate.kind === 'verified') return <UploadForm onDone={onDone} />;
+
+  if (!profileId) {
+    return (
+      <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700 p-6 text-center text-sm text-slate-500 dark:text-zinc-400">
+        Complete your creator profile first, then come back to verify your identity.
+      </div>
+    );
   }
 
   return (
     <KycVerification
       profileId={profileId}
-      status={gate === 'pending' ? 'pending' : 'unverified'}
+      status={gate.kind === 'rejected' ? 'rejected' : gate.kind === 'pending' ? 'pending' : 'unverified'}
+      rejectionReason={gate.kind === 'rejected' ? gate.reason : null}
       onSubmitted={() => {
-        setGate('pending');
+        setGate({ kind: 'pending' });
         refreshProfiles();
       }}
       onRefresh={loadGate}
+      refreshing={checking}
     />
   );
 }
