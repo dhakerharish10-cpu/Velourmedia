@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { findRestrictedKeyword, restrictedKeywordMessage } from './contentRules';
 import type { Profile, Content, Purchase, CreatorEarnings, CreatorBalances, BankDetails, Payout, PlatformSettings } from './types';
 
 interface Toast {
@@ -57,9 +58,8 @@ interface StoreContextValue {
   requestPayout: (amountUsd: number) => Promise<{ error: string | null }>;
   addToast: (message: string, type?: Toast['type']) => void;
   removeToast: (id: string) => void;
-  purchaseContent: (contentId: string, amount: number) => Promise<{ error: string | null }>;
   handlePayment: (contentId: string, creatorId: string) => Promise<void>;
-  recordPurchase: (contentId: string, amount: number, paymentId: string) => Promise<{ error: string | null }>;
+
   isUnlocked: (contentId: string) => boolean;
   handleTipPayment: (creatorId: string, contentId: string, amount: number) => Promise<void>;
   getProfileLink: (username: string) => string;
@@ -93,34 +93,19 @@ export function isAdminEmailCheck(email: string | null | undefined): boolean {
   return email.toLowerCase().trim() === ADMIN_EMAIL;
 }
 
-function getStoredGuestId(): string {
-  try {
-    let id = localStorage.getItem('velour_guest_device_id');
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem('velour_guest_device_id', id);
-    }
-    return id;
-  } catch {
-    return 'guest_browser';
-  }
-}
-
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-async function loadCreators(ids: any[]) {
-  const unique = Array.from(new Set(ids.filter(Boolean)));
-  const creatorMap = new Map();
-  if (unique.length === 0) return creatorMap;
+async function loadCreators(ids: Array<string | null | undefined>): Promise> {
+  const unique = Array.from(new Set(ids.filter((id): id is string => !!id)));
+  const map = new Map<string, Profile>();
+  if (unique.length === 0) return map;
   const { data, error } = await supabase.from('public_profiles').select('*').in('id', unique);
   if (error) {
     console.error('Failed to load creators:', error.message);
-    return creatorMap;
+    return map;
   }
-  (data || []).forEach((p: any) => {
-    creatorMap.set(String(p.id), p);
-  });
-  return creatorMap;
+  (data || []).forEach((p) => map.set(p.id as string, p as Profile));
+  return map;
 }
 
 export function useStore() {
@@ -236,8 +221,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     const rows = data || [];
-    const creatorMap = await loadCreators(rows.map((c: any) => c.creator_id));
-    setFeed(rows.map((c: any) => ({ ...c, creator: creatorMap.get(String(c.creator_id)) })) as unknown as Content[]);
+    const creators = await loadCreators(rows.map((c) => c.creator_id));
+    setFeed(rows.map((c) => ({ ...c, creator: creators.get(c.creator_id) })) as unknown as Content[]);
   }, []);
 
   const refreshPurchases = useCallback(async () => {
@@ -249,16 +234,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .from('purchases')
       .select('*, content:content(*)')
       .eq('buyer_id', user.id)
+      .eq('status', 'active')
       .order('created_at', { ascending: false });
     if (error) {
       console.error('Failed to load purchases:', error.message);
       return;
     }
     const rows = data || [];
-    const creatorMap = await loadCreators(rows.map((p: any) => p.content?.creator_id));
+    const creators = await loadCreators(rows.map((p) => p.content?.creator_id));
     setMyPurchases(
-      rows.map((p: any) =>
-        p.content ? { ...p, content: { ...p.content, creator: creatorMap.get(String(p.content.creator_id)) } } : p
+      rows.map((p) =>
+        p.content ? { ...p, content: { ...p.content, creator: creators.get(p.content.creator_id) } } : p
       ) as unknown as Purchase[]
     );
   }, [user]);
@@ -348,10 +334,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updatePlatformFee = useCallback(async (percent: number) => {
     if (!user) return { error: 'Not signed in.' };
     const clamped = Math.max(0, Math.min(100, percent));
-    const { error } = await supabase
-      .from('platform_settings')
-      .update({ platform_fee_percent: clamped, updated_at: new Date().toISOString(), updated_by: user.id })
-      .eq('id', 1);
+    const { error } = await supabase.rpc('admin_set_platform_fee', { p_percent: clamped });
     if (error) return { error: error.message };
     await refreshPlatformSettings();
     return { error: null };
@@ -371,24 +354,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
-      setSession(s);
-      setUser(s?.user ?? null);
-      setIsAdminEmail(isAdminEmailCheck(s?.user?.email));
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsAdminEmail(isAdminEmailCheck(session?.user?.email));
       setLoading(false);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      setIsAdminEmail(isAdminEmailCheck(s?.user?.email));
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsAdminEmail(isAdminEmailCheck(session?.user?.email));
       setLoading(false);
     });
 
     return () => {
       mounted = false;
-      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
@@ -440,7 +422,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
-
     setIsAdminEmail(isAdminEmailCheck(email));
     return { error: null };
   }, []);
@@ -470,25 +451,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setIsAdminEmail(false);
   }, []);
 
-  const handlePayment = useCallback(async (contentId: string, creatorId: string) => {
+  const handlePayment = useCallback(async (contentId: string, _creatorId: string) => {
     setIsRedirecting(true);
     try {
-      const guestDeviceId = getStoredGuestId();
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: {
-          kind: 'content',
-          content_id: contentId,
-          creator_id: creatorId,
-          guest_device_id: guestDeviceId,
-        },
+        body: { content_id: contentId },
       });
-      const checkoutUrl = data?.url || data?.invoice_url;
-      if (error || !checkoutUrl) throw new Error('Unable to start checkout. Please try again.');
-
-      if (data?.claim) {
-        try { localStorage.setItem(`claim:${contentId}`, data.claim); } catch { }
-      }
-      window.location.href = checkoutUrl;
+      if (error || !data?.url) throw new Error('Unable to start checkout. Please try again.');
+      window.location.href = data.url;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start checkout. Please try again.';
       addToast(message, 'error');
@@ -496,54 +466,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast]);
 
-  const purchaseContent = useCallback(async (contentId: string, _amount: number) => {
-    await handlePayment(contentId, '');
-    return { error: null };
-  }, [handlePayment]);
-
-  const recordPurchase = useCallback(async (_contentId: string, _amount: number, _paymentId: string) => {
-    await refreshPurchases();
-    await refreshFeed();
-    return { error: null };
-  }, [refreshPurchases, refreshFeed]);
-
   const isUnlocked = useCallback((contentId: string) => {
     return myPurchases.some((p) => p.content_id === contentId);
   }, [myPurchases]);
 
-  const handleTipPayment = useCallback(async (creatorId: string, contentId: string, tipAmount: number) => {
-    setIsRedirecting(true);
-    try {
-      const guestDeviceId = getStoredGuestId();
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: {
-          kind: 'tip',
-          creator_id: creatorId,
-          content_id: contentId,
-          tip_amount: tipAmount,
-          guest_device_id: guestDeviceId,
-        },
-      });
-      const checkoutUrl = data?.url || data?.invoice_url;
-      if (error || !checkoutUrl) {
-        let reason = '';
-        try {
-          const body = await (error as any)?.context?.json?.();
-          reason = body?.error || body?.detail || '';
-        } catch { }
-        throw new Error(reason || 'Unable to start tip checkout. Please try again.');
-      }
-      window.location.href = checkoutUrl;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to start tip checkout. Please try again.';
-      addToast(message, 'error');
-      setIsRedirecting(false);
-    }
+  const handleTipPayment = useCallback(async (_creatorId: string, _contentId: string, _tipAmount: number) => {
+    addToast('Tips are not available yet.', 'error');
   }, [addToast]);
 
   const getProfileLink = useCallback((username: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velourmedia.site';
-    return `${origin}/c/${encodeURIComponent(username)}`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';
+    return `${origin}/#c/${username}`;
   }, []);
 
   const saveBankDetails = useCallback(async (details: Pick<BankDetails, 'bank_name' | 'account_holder_name' | 'bank_account_number' | 'ifsc_code' | 'pan_card_number'>) => {
@@ -606,7 +539,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const duplicateContent = useCallback(async (contentId: string) => {
     const creatorId = activeProfileId || user?.id;
-    if (!creatorId) return { error: 'Not signed in.' };
+    if (!user || !creatorId) return { error: 'Not signed in.' };
     const { data: original, error: fetchError } = await supabase
       .from('content')
       .select('*')
@@ -614,21 +547,59 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
     if (fetchError) return { error: fetchError.message };
     if (!original) return { error: 'Content not found.' };
-    const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = original;
-    const { error: insertError } = await supabase
+
+    const ownsOriginal = original.creator_id === user.id || profiles.some((p) => p.id === original.creator_id);
+    if (!ownsOriginal) return { error: 'You can only duplicate your own posts.' };
+
+    const copyTitle = `${original.title} (Copy)`;
+    const bad = findRestrictedKeyword(copyTitle, original.description);
+    if (bad) return { error: restrictedKeywordMessage(bad) };
+
+    const { data: copy, error: insertError } = await supabase
       .from('content')
       .insert({
-        ...rest,
         creator_id: creatorId,
-        title: `${original.title} (Copy)`,
+        title: copyTitle,
+        description: original.description,
+        media_url: original.media_url,
+        media_type: original.media_type,
+        thumbnail_url: original.thumbnail_url,
+        price: original.price,
+        media_count: original.media_count,
+        blur_level: original.blur_level,
+        blur_percent: original.blur_percent,
         views_count: 0,
-        is_private: false,
         is_published: false,
-      });
-    if (insertError) return { error: insertError.message };
+        is_adult: false,
+      })
+      .select('id')
+      .single();
+    if (insertError || !copy) return { error: insertError?.message ?? 'Could not duplicate the post.' };
+
+    if (Number(original.media_count) > 1) {
+      const { data: mediaRows, error: mediaFetchError } = await supabase
+        .from('content_media')
+        .select('media_url, media_type, display_order, preview_url')
+        .eq('content_id', contentId)
+        .order('display_order', { ascending: true });
+      if (mediaFetchError) {
+        await supabase.from('content').delete().eq('id', copy.id);
+        return { error: mediaFetchError.message };
+      }
+      if (mediaRows && mediaRows.length > 0) {
+        const { error: mediaInsertError } = await supabase
+          .from('content_media')
+          .insert(mediaRows.map((m) => ({ ...m, content_id: copy.id })));
+        if (mediaInsertError) {
+          await supabase.from('content').delete().eq('id', copy.id);
+          return { error: `Could not copy the media: ${mediaInsertError.message}` };
+        }
+      }
+    }
+
     await refreshMyContent();
     return { error: null };
-  }, [activeProfileId, user, refreshMyContent]);
+  }, [activeProfileId, user, profiles, refreshMyContent]);
 
   const updateProfile = useCallback(async (updates: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'username' | 'email_sales_alerts' | 'email_payout_alerts' | 'email_account_alerts' | 'preferred_payout_method' | 'upi_id' | 'crypto_wallet_address' | 'crypto_network'>>) => {
     if (!user) return { error: 'Not signed in.' };
@@ -705,6 +676,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const closeEditPost = useCallback(() => setEditPostId(null), []);
 
   const updateContent = useCallback(async (contentId: string, updates: { title?: string; description?: string | null; price?: number; blur_level?: 'low' | 'medium' | 'hard'; blur_percent?: number }) => {
+    const bad = findRestrictedKeyword(updates.title, updates.description);
+    if (bad) return { error: restrictedKeywordMessage(bad) };
     const { error } = await supabase.from('content').update(updates).eq('id', contentId);
     if (error) return { error: error.message };
     await refreshMyContent();
@@ -713,39 +686,104 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [refreshMyContent, refreshFeed]);
 
   const addMediaToContent = useCallback(async (contentId: string, files: File[]) => {
-    const creatorId = activeProfileId || user?.id;
-    if (!creatorId) return { error: 'Not signed in.' };
-    const { data: existing } = await supabase.from('content_media').select('display_order').eq('content_id', contentId).order('display_order', { ascending: false }).limit(1).maybeSingle();
-    let nextOrder = (existing?.display_order ?? -1) + 1;
-    const uploadedUrls: { url: string; type: 'image' | 'video' }[] = [];
-    for (const file of files) {
-      const isImage = file.type.startsWith('image/');
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${creatorId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('creator-media').upload(fileName, file);
-      if (uploadError) return { error: uploadError.message };
-      const { data: urlData } = supabase.storage.from('creator-media').getPublicUrl(fileName);
-      uploadedUrls.push({ url: urlData.publicUrl, type: isImage ? 'image' : 'video' });
+    if (!user) return { error: 'Not signed in.' };
+    if (files.length === 0) return { error: null };
+
+    const { data: post, error: postError } = await supabase
+      .from('content')
+      .select('creator_id, price, title, description, media_url, media_type, thumbnail_url, media_count')
+      .eq('id', contentId)
+      .maybeSingle();
+    if (postError) return { error: postError.message };
+    if (!post) return { error: 'Post not found.' };
+
+    const bad = findRestrictedKeyword(post.title, post.description, ...files.map((f) => f.name));
+    if (bad) return { error: restrictedKeywordMessage(bad) };
+
+    const isPaid = Number(post.price) > 0;
+    const bucket = isPaid ? 'paid-media' : 'creator-media';
+    const folder = post.creator_id;
+
+    const uploaded: string[] = [];
+    const insertedIds: string[] = [];
+    const cleanup = async () => {
+      if (insertedIds.length > 0) await supabase.from('content_media').delete().in('id', insertedIds);
+      if (uploaded.length > 0) await supabase.storage.from(bucket).remove(uploaded);
+    };
+
+    try {
+      const { count: existingCount, error: countError } = await supabase
+        .from('content_media').select('id', { count: 'exact', head: true }).eq('content_id', contentId);
+      if (countError) return { error: countError.message };
+
+      const { data: last } = await supabase.from('content_media').select('display_order')
+        .eq('content_id', contentId).order('display_order', { ascending: false }).limit(1).maybeSingle();
+      let nextOrder = (last?.display_order ?? -1) + 1;
+
+      if ((existingCount ?? 0) === 0) {
+        const { data: firstRow, error: firstError } = await supabase.from('content_media').insert({
+          content_id: contentId,
+          media_url: post.media_url,
+          media_type: post.media_type,
+          display_order: 0,
+          preview_url: isPaid ? post.thumbnail_url : null,
+        }).select('id').single();
+        if (firstError) return { error: firstError.message };
+        insertedIds.push(firstRow.id);
+        nextOrder = 1;
+      }
+
+      const rows: { content_id: string; media_url: string; media_type: 'image' | 'video'; display_order: number }[] = [];
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        const isImage = file.type.startsWith('image/');
+        const ext = (file.name.split('.').pop() || (isImage ? 'jpg' : 'mp4')).toLowerCase();
+        const path = `${folder}/${Date.now()}-${index}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+          contentType: file.type || (isImage ? 'image/jpeg' : 'video/mp4'),
+          cacheControl: '3600',
+          upsert: false,
+        });
+        if (uploadError) {
+          await cleanup();
+          return { error: `Failed to upload ${file.name}: ${uploadError.message}` };
+        }
+        uploaded.push(path);
+        const url = isPaid ? path : supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+        rows.push({ content_id: contentId, media_url: url, media_type: isImage ? 'image' : 'video', display_order: nextOrder++ });
+      }
+
+      const { data: inserted, error: mediaError } = await supabase.from('content_media').insert(rows).select('id');
+      if (mediaError) {
+        await cleanup();
+        return { error: `Could not save the new media: ${mediaError.message}` };
+      }
+      (inserted ?? []).forEach((r) => insertedIds.push(r.id));
+
+      const { count: total } = await supabase
+        .from('content_media').select('id', { count: 'exact', head: true }).eq('content_id', contentId);
+      const { error: countUpdateError } = await supabase
+        .from('content').update({ media_count: Math.max(1, total ?? 1) }).eq('id', contentId);
+      if (countUpdateError) {
+        await cleanup();
+        return { error: `Could not update the post: ${countUpdateError.message}` };
+      }
+    } catch (e) {
+      await cleanup();
+      return { error: e instanceof Error ? e.message : 'Could not add media.' };
     }
-    if (uploadedUrls.length > 0) {
-      const mediaRecords = uploadedUrls.map((m) => ({ content_id: contentId, media_url: m.url, media_type: m.type, display_order: nextOrder++ }));
-      const { error: mediaError } = await supabase.from('content_media').insert(mediaRecords);
-      if (mediaError) return { error: mediaError.message };
-      const { data: content } = await supabase.from('content').select('media_count').eq('id', contentId).maybeSingle();
-      const newCount = (content?.media_count ?? 1) + uploadedUrls.length;
-      await supabase.from('content').update({ media_count: newCount }).eq('id', contentId);
-    }
+
     await refreshMyContent();
     await refreshFeed();
     return { error: null };
-  }, [activeProfileId, user, refreshMyContent, refreshFeed]);
+  }, [user, refreshMyContent, refreshFeed]);
 
   const removeMediaFromContent = useCallback(async (contentId: string, mediaId: string) => {
     const { error } = await supabase.from('content_media').delete().eq('id', mediaId).eq('content_id', contentId);
     if (error) return { error: error.message };
-    const { data: content } = await supabase.from('content').select('media_count').eq('id', contentId).maybeSingle();
-    const newCount = Math.max(1, (content?.media_count ?? 1) - 1);
-    await supabase.from('content').update({ media_count: newCount }).eq('id', contentId);
+    const { count: remaining } = await supabase
+      .from('content_media').select('id', { count: 'exact', head: true }).eq('content_id', contentId);
+    await supabase.from('content').update({ media_count: Math.max(1, remaining ?? 1) }).eq('id', contentId);
     await refreshMyContent();
     await refreshFeed();
     return { error: null };
@@ -799,9 +837,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updatePlatformFee,
     addToast,
     removeToast,
-    purchaseContent,
     handlePayment,
-    recordPurchase,
     isUnlocked,
     handleTipPayment,
     getProfileLink,
