@@ -5,7 +5,7 @@ const PAID_BUCKET = 'paid-media';
 
 /** A stored media value is either a public URL (http...) or a raw path inside the private bucket. */
 export const isStoragePath = (value: string | null | undefined): value is string =>
-  !!value && !/^https?:///i.test(value);
+  !!value && !/^https?:\/\//i.test(value);
 
 /**
  * Signs several private-bucket paths in ONE request.

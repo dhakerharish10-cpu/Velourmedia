@@ -15,6 +15,9 @@ export interface Profile {
   crypto_wallet_address: string;
   crypto_network: string;
   kyc_status: 'not_submitted' | 'pending' | 'approved' | 'rejected';
+  kyc_document_type: string | null;
+  kyc_front_url: string | null;
+  kyc_back_url: string | null;
   is_suspended: boolean;
   is_banned: boolean;
   created_at: string;

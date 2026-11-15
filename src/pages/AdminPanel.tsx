@@ -861,7 +861,7 @@ function CreatorPerformanceTable({
     const creatorPurchases = purchases.filter((p) => p.content?.creator?.id === prof.id || creatorContent.some((c) => c.id === p.content_id));
     const purchaseGross = creatorPurchases.reduce((s, p) => s + Number(p.amount_paid), 0);
     const txGross = txRows.filter((t) => t.creator_id === prof.id).reduce((s, t) => s + t.amount, 0);
-    const txCreatorEarnings = txRows.filter((t) => t.creator_id === prof.id).reduce((s, t) => s + (t.creator_earnings || t.amount * 0.7), 0);
+    const txCreatorEarnings = txRows.filter((t) => t.creator_id === prof.id).reduce((s, t) => s + ((t as Record<string, unknown>).creator_earnings as number || t.amount * 0.7), 0);
     const gross = purchaseGross + txGross;
     const platformShare = Math.round(gross * 0.3 * 100) / 100;
     const creatorPayout = Math.round((purchaseGross > 0 ? creatorPurchases.reduce((s, p) => s + Number(p.net_to_creator || 0), 0) : 0) + txCreatorEarnings);

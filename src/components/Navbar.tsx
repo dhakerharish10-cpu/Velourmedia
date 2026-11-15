@@ -1,7 +1,7 @@
 import { useStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
 import { UserMenu } from './UserMenu';
-import { Sparkles, LayoutDashboard, Library, Menu, X, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Library, Menu, X, Sun, Moon } from 'lucide-react';
 
 function ThemeToggle({ theme, toggleTheme, size = 18 }: { theme: string; toggleTheme: () => void; size?: number }) {
   return (

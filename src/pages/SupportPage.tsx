@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Mail, User, MessageSquare, Loader2, Send, Check } from 'lucide-react';
+import { ArrowLeft, Mail, User, MessageSquare, Send } from 'lucide-react';
 
 interface SupportPageProps {
   onNavigate: (path: string) => void;
@@ -10,10 +10,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
   const [email, setEmail] = useState('');
   const [category, setCategory] = useState('Payment Issue');
   const [message, setMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [sent, setSent] = useState(false);
-
-    const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const subject = encodeURIComponent(`[${category}] Support Request - ${name}`);
     const body = encodeURIComponent(
@@ -54,23 +51,6 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
 
         {/* Card */}
         <div className="rounded-2xl glass border border-slate-200 dark:border-zinc-700/50 p-6 sm:p-8 shadow-2xl">
-          {sent ? (
-            <div className="text-center py-8">
-              <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-                <Check size={28} className="text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <h2 className="text-lg font-semibold text-white">Message Sent</h2>
-              <p className="text-sm text-slate-500 dark:text-zinc-400 mt-2 max-w-sm mx-auto">
-                Thanks for reaching out! We will get back to you within 24 hours at the email you provided.
-              </p>
-              <button
-                onClick={() => onNavigate('')}
-                className="mt-6 px-6 py-2.5 rounded-xl bg-emerald-500 text-slate-900 dark:text-white font-semibold text-sm hover:bg-emerald-400 transition-colors"
-              >
-                Back to Home
-              </button>
-            </div>
-          ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <div className="relative">
@@ -125,20 +105,12 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
 
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full rounded-xl bg-emerald-500 text-slate-900 dark:text-white font-semibold py-3 hover:bg-emerald-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                className="w-full rounded-xl bg-emerald-500 text-slate-900 dark:text-white font-semibold py-3 hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
               >
-                {submitting ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <>
-                    <Send size={18} />
-                    Send Message
-                  </>
-                )}
+                <Send size={18} />
+                Send Message
               </button>
             </form>
-          )}
         </div>
 
         {/* Direct email box */}
