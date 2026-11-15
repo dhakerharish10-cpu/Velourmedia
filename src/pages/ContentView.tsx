@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 50;
+const TIPS_ENABLED = false;
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -32,30 +33,31 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   const [justPurchased, setJustPurchased] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [unlockedMedia, setUnlockedMedia] = useState<{ url: string; type: 'image' | 'video' }[] | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(false);
 
-  const actualDbId = content?.id || (contentId.includes('-') ? contentId : '');
-  const currentDbIdRef = useRef(actualDbId);
-  currentDbIdRef.current = actualDbId;
+  const currentContentIdRef = useRef(contentId);
+  currentContentIdRef.current = contentId;
 
   useEffect(() => {
     setUnlockedMedia(null);
     setMediaItems([]);
     setActiveIndex(0);
     setJustPurchased(false);
+    setCheckingAccess(false);
   }, [contentId]);
 
-  const isOwned = actualDbId ? isUnlocked(actualDbId) : false;
+  const isOwned = isUnlocked(contentId);
   const isFree = content ? Number(content.price) <= 0 : false;
-  const hasAccess = isOwned || isFree || !!unlockedMedia;
+  const hasAccess = isFree || !!unlockedMedia;
 
   const returnedFromCheckout =
     typeof window !== 'undefined' && window.location.href.includes('paid=1');
 
-  const fetchMedia = useCallback(async (realId: string) => {
+  const fetchMedia = useCallback(async (contentId: string) => {
     const { data } = await supabase
       .from('content_media')
       .select('*')
-      .eq('content_id', realId)
+      .eq('content_id', contentId)
       .order('display_order', { ascending: true });
     return data || [];
   }, []);
@@ -65,17 +67,16 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     (async () => {
       setLoading(true);
 
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contentId);
-
-      const query = supabase.from('content').select('*');
-      const { data: contentData, error: contentError } = isUUID
-        ? await query.eq('id', contentId).maybeSingle()
-        : await query.eq('short_code', contentId).maybeSingle();
+      const { data: contentData, error: contentError } = await supabase
+        .from('content')
+        .select('*')
+        .eq('id', contentId)
+        .maybeSingle();
 
       if (!active) return;
 
       if (contentError || !contentData) {
-        console.error('Error loading content:', contentError);
+        console.error("Error loading post:", contentError);
         setContent(null);
         setLoading(false);
         return;
@@ -83,42 +84,32 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
       let creatorData = null;
       if (contentData.creator_id) {
-        const { data: pData } = await supabase
-          .from('profiles')
+        const { data: pData, error: creatorError } = await supabase
+          .from('public_profiles')
           .select('*')
           .eq('id', contentData.creator_id)
           .maybeSingle();
+        if (creatorError) console.error('Could not load creator:', creatorError.message);
         creatorData = pData;
-      }
-
-      if (!creatorData && contentData.creator_id) {
-        const { data: fallbackProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('owner_id', contentData.creator_id)
-          .order('is_primary', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        creatorData = fallbackProfile;
       }
 
       setContent({
         ...contentData,
-        creator: creatorData || { display_name: 'Creator', username: 'creator' }
+        creator: creatorData || undefined,
       });
 
-      supabase.rpc('increment_content_views', { p_content_id: contentData.id }).then(({ error }) => {
+      supabase.rpc('increment_content_views', { p_content_id: contentId }).then(({ error }) => {
         if (error) {
           supabase
             .from('content')
             .update({ views_count: (contentData.views_count || 0) + 1 })
-            .eq('id', contentData.id)
+            .eq('id', contentId)
             .then(() => {});
         }
       });
 
       if (contentData.media_count > 1) {
-        const extraMedia = await fetchMedia(contentData.id);
+        const extraMedia = await fetchMedia(contentId);
         if (active) setMediaItems(extraMedia);
       }
 
@@ -135,22 +126,24 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   }, [user, refreshPurchases]);
 
   const loadUnlockedMedia = useCallback(async (): Promise<boolean> => {
-    if (!actualDbId) return false;
     let claim = '';
-    try { claim = localStorage.getItem(`claim:${actualDbId}`) ?? ''; } catch { }
+    try { claim = localStorage.getItem(`claim:${contentId}`) ?? ''; } catch { /* storage unavailable */ }
     if (!user && !claim) return false;
-
-    const { data, error } = await supabase.functions.invoke('get-media', {
-      body: { content_id: actualDbId, claim },
-    });
-    if (currentDbIdRef.current !== actualDbId) return false;
-    if (error || !data?.media?.length) return false;
-    setUnlockedMedia(data.media as { url: string; type: 'image' | 'video' }[]);
-    return true;
-  }, [actualDbId, user]);
+    setCheckingAccess(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('get-media', {
+        body: { content_id: contentId, claim },
+      });
+      if (currentContentIdRef.current !== contentId) return false;
+      if (error || !data?.media?.length) return false;
+      setUnlockedMedia(data.media as { url: string; type: 'image' | 'video' }[]);
+      return true;
+    } finally {
+      if (currentContentIdRef.current === contentId) setCheckingAccess(false);
+    }
+  }, [contentId, user]);
 
   const isPaidPost = !!content && Number(content.price) > 0;
-  const isPrivatePaid = isPaidPost && !/^https?:\/\//i.test(content?.media_url ?? '');
 
   useEffect(() => {
     if (!content || !isPaidPost || unlockedMedia) return;
@@ -189,8 +182,8 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     ? mediaItems.map(m => ({ url: m.media_url, type: m.media_type }))
     : content ? [{ url: content.media_url, type: content.media_type }] : [];
 
-  const shownMedia = unlockedMedia ?? (isPrivatePaid ? [] : allMedia);
-  const previewMedia: { url: string; type: 'image' | 'video' }[] = isPrivatePaid
+  const shownMedia = unlockedMedia ?? (isPaidPost ? [] : allMedia);
+  const previewMedia: { url: string; type: 'image' | 'video' }[] = isPaidPost
     ? (() => {
         const perFile = mediaItems
           .map((m) => (m as ContentMedia & { preview_url?: string | null }).preview_url)
@@ -217,21 +210,18 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
     setIsRedirecting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { 
-          content_id: content.id,
-          short_code: content.short_code || ''
-        },
+        body: { content_id: content.id },
       });
       if (error || !data?.url) {
         let reason = '';
         try {
           const body = await (error as any)?.context?.json?.();
           reason = body?.detail || body?.error || '';
-        } catch { }
+        } catch { /* ignore */ }
         throw new Error(reason || 'Unable to start checkout. Please try again.');
       }
       if (data.claim) {
-        try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { }
+        try { localStorage.setItem(`claim:${content.id}`, data.claim); } catch { /* storage unavailable */ }
       }
       window.location.href = data.url;
     } catch (err) {
@@ -245,6 +235,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
   };
 
   const priceDisplay = content ? Number(content.price).toFixed(2) : '0.00';
+
   const blurPx = ((content?.blur_percent ?? 60) / 100) * 24;
   const blurStyle = { filter: `blur(${blurPx}px)` };
   const thumbBlurPx = (blurPx * 0.4);
@@ -258,13 +249,13 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <button
           onClick={() => onNavigate('')}
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white transition-colors mb-6"
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-slate-900 dark:text-white transition-colors mb-6"
         >
           <ArrowLeft size={16} />
           Back
         </button>
 
-        {loading ? (
+        {loading || (checkingAccess && isPaidPost && !unlockedMedia) ? (
           <div className="py-20 text-center">
             <Loader2 size={28} className="animate-spin text-indigo-500 mx-auto" />
             <p className="text-sm text-slate-400 dark:text-zinc-500 mt-3">Loading...</p>
@@ -354,6 +345,12 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-20deg] text-white/10 text-2xl font-bold whitespace-nowrap select-none">
                       {maskEmail(user.email)}
                     </div>
+                    <div className="absolute top-[20%] left-[10%] rotate-[-20deg] text-white/[0.07] text-lg font-semibold whitespace-nowrap select-none">
+                      {maskEmail(user.email)}
+                    </div>
+                    <div className="absolute bottom-[20%] right-[10%] rotate-[-20deg] text-white/[0.07] text-lg font-semibold whitespace-nowrap select-none">
+                      {maskEmail(user.email)}
+                    </div>
                   </div>
                   <div className="absolute bottom-3 right-3 px-2 py-1 rounded-md bg-black/40 text-[10px] text-white/50 font-mono pointer-events-none">
                     {maskEmail(user.email)}
@@ -377,7 +374,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 onClick={() => content.creator && onNavigate(`c/${content.creator.username}`)}
                 className="text-sm text-indigo-600 hover:text-indigo-500 mt-1"
               >
-                by {content.creator?.display_name || content.creator?.username || 'Creator'}
+                by {content.creator?.display_name || content.creator?.username || 'Unknown'}
               </button>
               {content.description && (
                 <p className="text-sm text-slate-600 dark:text-zinc-300 mt-3 leading-relaxed">{content.description}</p>
@@ -391,14 +388,16 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
               </div>
             </div>
 
-            <TipCard
-              creatorId={content.creator_id}
-              contentId={content.id}
-              creatorName={content.creator?.display_name || content.creator?.username || 'creator'}
-              onTip={handleTipPayment}
-              user={user}
-              openAuth={openAuth}
-            />
+            {TIPS_ENABLED && (
+              <TipCard
+                creatorId={content.creator_id}
+                contentId={content.id}
+                creatorName={content.creator?.display_name || content.creator?.username || 'creator'}
+                onTip={handleTipPayment}
+                user={user}
+                openAuth={openAuth}
+              />
+            )}
 
             <div className="rounded-xl bg-slate-100 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 px-4 py-3 flex items-center gap-2.5">
               <Lock size={14} className="text-slate-400 dark:text-zinc-500 shrink-0" />
@@ -562,7 +561,7 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold text-white truncate">
-                      {content.creator?.display_name || content.creator?.username || 'Creator'}
+                      {content.creator?.display_name || content.creator?.username || 'Unknown'}
                     </p>
                     <BadgeCheck size={15} className="text-indigo-400 shrink-0" fill="currentColor" />
                   </div>
@@ -619,11 +618,11 @@ export function ContentView({ contentId, onNavigate }: ContentViewProps) {
 
               <div className="flex items-center justify-center gap-6 mt-4">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Shield size={14} />
+                  <Shield size={14} className="text-indigo-400" />
                   Secure payment
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Zap size={14} />
+                  <Zap size={14} className="text-amber-400" />
                   Instant access
                 </div>
               </div>
