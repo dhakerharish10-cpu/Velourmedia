@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { useResolvedMedia } from '../lib/signedMedia';
+import { findRestrictedKeyword, restrictedKeywordMessage } from '../lib/contentRules';
 import type { ContentMedia } from '../lib/types';
 import { X, Loader2, DollarSign, ImageIcon, Video, Upload, Trash2, Check } from 'lucide-react';
 
@@ -17,6 +19,9 @@ export function EditPostModal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Resolve private storage paths to signed URLs for creator preview
+  const resolveMedia = useResolvedMedia(mediaItems.map((m) => m.media_url));
 
   const fetchMedia = useCallback(async (contentId: string) => {
     const { data } = await supabase
@@ -96,6 +101,11 @@ export function EditPostModal() {
       setError('Title cannot be empty.');
       return;
     }
+    const restricted = findRestrictedKeyword(title, description, ...newFiles.map((f) => f.name));
+    if (restricted) {
+      setError(restrictedKeywordMessage(restricted));
+      return;
+    }
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum < 0) {
       setError('Please enter a valid price.');
@@ -160,24 +170,33 @@ export function EditPostModal() {
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Current Media ({mediaItems.length})</label>
                 <div className="grid grid-cols-4 gap-2">
-                  {mediaItems.map((m) => (
-                    <div key={m.id} className="relative group rounded-lg overflow-hidden bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-zinc-700/50 aspect-square">
-                      {m.media_type === 'image' ? (
-                        <img src={m.media_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-zinc-800">
-                          <Video size={16} className="text-slate-400 dark:text-zinc-500" />
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveExisting(m.id)}
-                        className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-white hover:bg-rose-500/80 transition-colors"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
+                  {mediaItems.map((m) => {
+                    const resolvedUrl = resolveMedia(m.media_url);
+                    return (
+                      <div key={m.id} className="relative group rounded-lg overflow-hidden bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-zinc-700/50 aspect-square">
+                        {m.media_type === 'image' ? (
+                          resolvedUrl ? (
+                            <img src={resolvedUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-zinc-800">
+                              <Loader2 size={14} className="animate-spin text-slate-400 dark:text-zinc-500" />
+                            </div>
+                          )
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-zinc-800">
+                            <Video size={16} className="text-slate-400 dark:text-zinc-500" />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExisting(m.id)}
+                          className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-white hover:bg-rose-500/80 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
