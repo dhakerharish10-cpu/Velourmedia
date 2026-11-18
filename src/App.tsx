@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StoreProvider, useStore, isAdminEmailCheck } from './lib/store';
 import { useHashRoute, parseRoute } from './lib/router';
 import { ToastContainer } from './components/Toast';
@@ -17,6 +17,7 @@ import { ReferEarnPage } from './pages/ReferEarn';
 import { SettingsPage } from './pages/SettingsPage';
 import { CreatorProfile } from './pages/CreatorProfile';
 import { ContentView } from './pages/ContentView';
+import { ShortLinkPage } from './pages/ShortLinkPage';
 import { AdminPanel } from './pages/AdminPanel';
 import { PurchaseLibrary } from './pages/PurchaseLibrary';
 import { PaymentResult } from './pages/PaymentResult';
@@ -30,6 +31,19 @@ function Router() {
   const { loading, isRedirecting, user } = useStore();
   const isAdmin = user ? isAdminEmailCheck(user.email) : false;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const { segments } = parseRoute(route);
+  const atRoot = segments.length === 0;
+  // Pages visitors can open without an account. They load on their own and never wait for auth.
+  const PUBLIC_ROUTES = ['u', 'l', 'c', 'access', 'payment', 'support', 'contact', 'legal', 'terms', 'privacy', 'refund', 'refund-policy', 'complaints'];
+  const isPublicRoute = PUBLIC_ROUTES.includes(segments[0] ?? '');
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Signed-in users who land on "/" go to their dashboard (done in an effect, not while rendering)
+  useEffect(() => {
+    if (!loading && atRoot && user) navigate(isAdmin ? 'admin' : 'dashboard');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, atRoot, user, isAdmin]);
 
   if (isRedirecting) {
     return (
@@ -45,7 +59,7 @@ function Router() {
     );
   }
 
-  if (loading) {
+  if (loading && !isPublicRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950">
         <div className="flex flex-col items-center gap-3">
@@ -56,14 +70,9 @@ function Router() {
     );
   }
 
-  const { segments } = parseRoute(route);
-
   // Landing page (no sidebar)
-  if (segments.length === 0) {
-    if (user) {
-      navigate(isAdmin ? 'admin' : 'dashboard');
-      return null;
-    }
+  if (atRoot) {
+    if (user) return null; // the effect above sends signed-in users to their dashboard
     return (
       <>
         <Landing onNavigate={navigate} />
@@ -138,22 +147,24 @@ function Router() {
     );
   }
 
-  // Content view (Legacy UUID route)
+  // Content view by id (/u/:id). Anything that is not a valid id shows the "link isn't available" page.
   if (first === 'u' && second) {
     return (
       <>
-        <ContentView contentId={second} onNavigate={navigate} />
+        {UUID_RE.test(second)
+          ? <ContentView contentId={second} onNavigate={navigate} />
+          : <ShortLinkPage code="" onNavigate={navigate} />}
         <ToastContainer />
         <AuthModal onNavigate={navigate} />
       </>
     );
   }
 
-  // Content view (Clean short route /l/:code)
+  // Short link (/l/:code): the code is looked up, then the normal post page is shown
   if (first === 'l' && second) {
     return (
       <>
-        <ContentView contentId={second} onNavigate={navigate} />
+        <ShortLinkPage code={second} onNavigate={navigate} />
         <ToastContainer />
         <AuthModal onNavigate={navigate} />
       </>

@@ -475,8 +475,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [addToast]);
 
   const getProfileLink = useCallback((username: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velour.app';
-    return `${origin}/#c/${username}`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://velourmedia.site';
+    return `${origin}/c/${encodeURIComponent(username)}`;
   }, []);
 
   const saveBankDetails = useCallback(async (details: Pick<BankDetails, 'bank_name' | 'account_holder_name' | 'bank_account_number' | 'ifsc_code' | 'pan_card_number'>) => {

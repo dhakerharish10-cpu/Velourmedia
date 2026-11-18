@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { postShareLink } from '../lib/postLinks';
 import {
   Package, Eye, DollarSign, Link2, Copy, Check, Crown, BarChart3,
   Lock, Unlock, Power, Plus, Search, ExternalLink, ShoppingBag,
@@ -71,9 +72,7 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
   };
 
   const handleCopyPostLink = async (item: { id: string; short_code?: string | null }) => {
-    const code = item.short_code || item.id;
-    const path = item.short_code ? `l/${code}` : `u/${code}`;
-    const link = `${window.location.origin}/${path}`;
+    const link = postShareLink({ id: item.id, short_code: item.short_code });
 
     try {
       await navigator.clipboard.writeText(link);
@@ -280,9 +279,7 @@ export function CreatorProfileView({ onNavigate: _onNavigate }: { onNavigate: (p
         ) : (
           <div className="space-y-3">
             {filteredPosts.map((item) => {
-              const code = (item as any).short_code || item.id;
-              const path = (item as any).short_code ? `l/${code}` : `u/${code}`;
-              const itemLink = `${window.location.origin}/${path}`;
+              const itemLink = postShareLink({ id: item.id, short_code: (item as { short_code?: string | null }).short_code });
               const isPrivate = item.is_private;
               const isActive = item.is_published;
               const earned = Number(item.earned_amount || 0);
